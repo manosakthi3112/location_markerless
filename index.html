@@ -18,18 +18,32 @@
     </div>
 
     <div id="ui-overlay" style="display: none;">
-        <h2>Smart 3D Direction System</h2>
+        <!-- Top Navigation Header -->
+        <div id="top-nav-panel">
+            <div class="nav-icon-container">
+                <span id="nav-arrow" style="font-size: 30px;">↑</span>
+            </div>
+            <div class="nav-text-container">
+                <h3 id="instruction">Waiting for GPS...</h3>
+                <p id="distance">--</p>
+            </div>
+        </div>
 
-        <button onclick="setDestination(10.6412815, 77.00289369)">
-            Go to Target Location
-        </button>
-        <button id="like-btn" onclick="toggleLike()">❤️ Like</button>
+        <!-- Middle Tools -->
+        <div id="middle-tools">
+            <button id="like-btn" onclick="toggleLike()">❤️ Like</button>
+            <p id="current-coords"></p>
+        </div>
 
-        <p id="current-coords" style="font-size: 14px; margin: 5px; color: #aaa;"></p>
-        <p id="distance"></p>
-        <h3 id="instruction"
-            style="color: #00ff00; font-size: 32px; margin-top: 15px; font-weight: bold; text-shadow: 2px 3px 5px rgba(0,0,0,0.9);">
-            Waiting for GPS...</h3>
+        <!-- Bottom Sheet -->
+        <div id="bottom-sheet">
+            <div class="sheet-handle"></div>
+            <h2 class="destination-title">Target Destination</h2>
+            <p class="destination-subtitle">Markerless Navigation</p>
+            <button class="primary-btn" onclick="setDestination(10.6412815, 77.00289369)">
+                Start Directions
+            </button>
+        </div>
     </div>
 
     <div id="container"></div>

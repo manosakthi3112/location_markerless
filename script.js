@@ -265,18 +265,27 @@ function updateInstructions() {
     const dot = cameraDirection.dot(targetDirection);
     const angle = Math.atan2(cross.y, dot) * (180 / Math.PI); // degrees
 
-    let instruction = "Look Around \u21bb";
-    if (dot > 0.9) { // ~25 deg FOV
-        instruction = "\u2191 Target Ahead";
+    const navIcon = document.getElementById("nav-arrow");
+
+    let instruction = "Orienting...";
+    let arrowIcon = "🔄";
+
+    if (dot > 0.9) {
+        instruction = "Head Straight";
+        arrowIcon = "↑";
     } else if (angle > 15) {
-        instruction = "\u2190 Turn Left";
+        instruction = "Turn Left";
+        arrowIcon = "←";
     } else if (angle < -15) {
-        instruction = "Turn Right \u2192";
+        instruction = "Turn Right";
+        arrowIcon = "→";
     } else if (dot < 0) {
-        instruction = "Turn Around \u21bb";
+        instruction = "Turn Around";
+        arrowIcon = "↓";
     }
 
     document.getElementById("instruction").innerText = instruction;
+    if (navIcon) navIcon.innerText = arrowIcon;
 }
 
 
