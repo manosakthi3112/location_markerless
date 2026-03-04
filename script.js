@@ -4,8 +4,8 @@ let targetLat = null, targetLon = null;
 let destinationObject = null;
 let pathLine = null;
 let pathArrows = [];
-let maxArrows = 15;
-let arrowSpacing = 4.5; // meters
+let maxArrows = 8;
+let arrowSpacing = 8.0; // meters
 let hasStarted = false;
 
 // 1 degree of latitude is ~111km. So 111,000 meters
@@ -13,33 +13,37 @@ const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
 
 function createRoadArrow() {
-    // Street View Chevron Shape
+    // Street View Chevron Shape - MUCH BIGGER
     const shape = new THREE.Shape();
-    shape.moveTo(0, 1.2);
-    shape.lineTo(1.2, -0.4);
-    shape.lineTo(0.8, -0.7);
-    shape.lineTo(0, 0.4);
-    shape.lineTo(-0.8, -0.7);
-    shape.lineTo(-1.2, -0.4);
+    shape.moveTo(0, 3.6);
+    shape.lineTo(3.6, -1.2);
+    shape.lineTo(2.4, -2.1);
     shape.lineTo(0, 1.2);
+    shape.lineTo(-2.4, -2.1);
+    shape.lineTo(-3.6, -1.2);
+    shape.lineTo(0, 3.6);
 
     const geometry = new THREE.ShapeGeometry(shape);
-    // Soft white color like Google Street View
+    // Bold white color like Google Street View
     const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.rotation.x = Math.PI / 2;
-    mesh.position.y = 0.02; // elevate slightly above shadow
+    mesh.position.y = 0.05; // elevate slightly above shadow
 
-    // Drop shadow chevron for depth
-    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    // Deeper Drop shadow chevron for contrast on the road
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
     shadowMesh.rotation.x = Math.PI / 2;
-    shadowMesh.scale.set(1.1, 1.1, 1.1);
-    shadowMesh.position.set(0, -0.01, -0.1);
+    shadowMesh.scale.set(1.15, 1.15, 1.15);
+    shadowMesh.position.set(0, 0.01, -0.2);
 
     const group = new THREE.Group();
     group.add(mesh);
     group.add(shadowMesh);
+
+    // Ensure it's massive
+    group.scale.set(1.5, 1.5, 1.5);
+
     return group;
 }
 
@@ -147,6 +151,8 @@ function animate() {
         if (dist > 0.1) {
             const dirX = dx / dist;
             const dirZ = dz / dist;
+
+            // MATH FIX: atan2(x, z) gives the correct yaw rotation in Three.js (y-axis up)
             const angle = Math.atan2(dx, dz);
 
             const speed = 1.0; // slower floating pace
@@ -157,6 +163,8 @@ function animate() {
                 if (offset < dist && offset > 1) { // starts slightly in front of user
                     pathArrows[i].visible = true;
                     pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset); // slightly above line
+
+                    // Apply exactly the angle so it rotates flat on the ground towards the target
                     pathArrows[i].rotation.y = angle;
 
                     // fade out near destination or camera
