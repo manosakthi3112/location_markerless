@@ -287,6 +287,12 @@ function getLocation() {
                 const initFetching = (userLat === null && targetLat !== null);
                 userLat = position.coords.latitude;
                 userLon = position.coords.longitude;
+
+                const coordsEl = document.getElementById("current-coords");
+                if (coordsEl) {
+                    coordsEl.innerText = `My Location: ${userLat.toFixed(6)}, ${userLon.toFixed(6)}`;
+                }
+
                 // If it's the first GPS lock after choosing destination, fetch the map route
                 if (initFetching || routeCoordinates.length === 0) {
                     if (targetLat !== null) fetchRoute();
