@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>3D Web Navigation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <video id="camera-feed" autoplay playsinline></video>
+
+    <div id="ui-overlay">
+        <h2>Smart 3D Direction System</h2>
+
+        <button onclick="setDestination(10.9025, 78.3933)">
+            Go to Target Location
+        </button>
+        <button id="like-btn" onclick="toggleLike()">❤️ Like</button>
+
+        <p id="distance"></p>
+    </div>
+
+    <div id="container"></div>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
