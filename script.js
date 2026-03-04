@@ -67,11 +67,27 @@ function animate() {
 }
 
 function getLocation() {
-    navigator.geolocation.watchPosition(position => {
-        userLat = position.coords.latitude;
-        userLon = position.coords.longitude;
-        updateDirection();
-    });
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+            position => {
+                userLat = position.coords.latitude;
+                userLon = position.coords.longitude;
+                updateDirection();
+            },
+            error => {
+                console.error("Error getting location: ", error);
+                document.getElementById("instruction").innerText = "Location Error!";
+            },
+            {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            }
+        );
+    } else {
+        console.error("Geolocation not supported");
+        document.getElementById("instruction").innerText = "GPS Not Supported";
+    }
 }
 
 function setDestination(lat, lon) {
@@ -174,7 +190,13 @@ function updateDirection() {
 
     const distance = calculateDistance(userLat, userLon, targetLat, targetLon);
     const distanceEl = document.getElementById("distance");
-    if (distanceEl) distanceEl.innerText = "Distance: " + distance.toFixed(2) + " meters";
+    if (distanceEl) {
+        if (distance > 1000) {
+            distanceEl.innerText = "Distance: " + (distance / 1000).toFixed(2) + " km";
+        } else {
+            distanceEl.innerText = "Distance: " + distance.toFixed(0) + " meters";
+        }
+    }
 }
 
 // Open device camera for markerless AR background
