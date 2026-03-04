@@ -3,11 +3,40 @@ let userLat = null, userLon = null;
 let targetLat = null, targetLon = null;
 let destinationObject = null;
 let pathLine = null;
+let pathArrows = [];
+let maxArrows = 20;
+let arrowSpacing = 3; // meters
 let hasStarted = false;
 
 // 1 degree of latitude is ~111km. So 111,000 meters
 const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
+
+function createRoadArrow() {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 1.0);
+    shape.lineTo(0.6, -0.4);
+    shape.lineTo(0.25, -0.4);
+    shape.lineTo(0.25, -1.5);
+    shape.lineTo(-0.25, -1.5);
+    shape.lineTo(-0.25, -0.4);
+    shape.lineTo(-0.6, -0.4);
+    shape.lineTo(0, 1.0);
+
+    const geometry = new THREE.ShapeGeometry(shape);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = Math.PI / 2;
+
+    const edges = new THREE.EdgesGeometry(geometry);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+    line.rotation.x = Math.PI / 2;
+
+    const group = new THREE.Group();
+    group.add(mesh);
+    group.add(line);
+    return group;
+}
 
 function init3D() {
     scene = new THREE.Scene();
@@ -26,6 +55,13 @@ function init3D() {
     // const gridHelper = new THREE.GridHelper( 50, 50, 0x444444, 0x888888 );
     // gridHelper.position.y = -2;
     // scene.add( gridHelper );
+
+    for (let i = 0; i < maxArrows; i++) {
+        const arrow = createRoadArrow();
+        arrow.visible = false;
+        pathArrows.push(arrow);
+        scene.add(arrow);
+    }
 
     animate();
 }
@@ -62,10 +98,12 @@ function updateDestinationObject() {
     // Update Path Line pointing strictly from below camera to the target
     if (!pathLine) {
         const lineMaterial = new THREE.LineDashedMaterial({
-            color: 0x00ff00,
+            color: 0x00aa00,
             linewidth: 3,
             dashSize: 1,
             gapSize: 0.5,
+            transparent: true,
+            opacity: 0.5
         });
         const lineGeom = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, -2, 0),
@@ -97,6 +135,38 @@ function animate() {
 
     if (destinationObject) {
         destinationObject.rotation.y += 0.02; // spin
+
+        const dx = destinationObject.position.x;
+        const dz = destinationObject.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > 0.1) {
+            const dirX = dx / dist;
+            const dirZ = dz / dist;
+            const angle = Math.atan2(dx, dz);
+
+            const speed = 2.5; // meters per sec
+            const time = Date.now() * 0.001;
+
+            for (let i = 0; i < maxArrows; i++) {
+                let offset = (time * speed + i * arrowSpacing) % Math.max(dist, arrowSpacing * maxArrows);
+                if (offset < dist && offset > 1) { // starts slightly in front of user
+                    pathArrows[i].visible = true;
+                    pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset); // slightly above line
+                    pathArrows[i].rotation.y = angle;
+
+                    // fade out near destination or camera
+                    let opacity = 0.8;
+                    if (offset < 4) opacity = ((offset - 1) / 3) * 0.8;
+                    if (dist - offset < 2) opacity = (dist - offset) / 2 * 0.8;
+
+                    pathArrows[i].children.forEach(c => {
+                        if (c.material) c.material.opacity = Math.max(0, opacity);
+                    });
+                } else {
+                    pathArrows[i].visible = false;
+                }
+            }
+        }
     }
 
     updateInstructions();
