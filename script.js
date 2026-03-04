@@ -188,7 +188,24 @@ function animate() {
 }
 
 function updateInstructions() {
-    if (!destinationObject || !hasStarted) return;
+    if (!hasStarted) return;
+
+    const instructionEl = document.getElementById("instruction");
+
+    if (userLat === null || userLon === null) {
+        instructionEl.innerText = "Waiting for GPS Signal...";
+        return;
+    }
+
+    if (targetLat === null || targetLon === null) {
+        instructionEl.innerText = "Please Select a Target Location";
+        return;
+    }
+
+    if (!destinationObject) {
+        instructionEl.innerText = "Calculating Route...";
+        return;
+    }
 
     // Calculate distance
     const distance = calculateDistance(userLat, userLon, targetLat, targetLon);
