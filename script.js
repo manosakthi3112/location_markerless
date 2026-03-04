@@ -8,6 +8,11 @@ let maxArrows = 15;
 let arrowSpacing = 5.0; // meters
 let hasStarted = false;
 
+// Routing API Globals
+let routeCoordinates = []; // GeoJSON [lon, lat] array from OSRM
+let routeCurve = null;     // THREE.CatmullRomCurve3
+let routeLength = 0;       // Length of the spline curve
+
 // 1 degree of latitude is ~111km. So 111,000 meters
 const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
@@ -75,24 +80,78 @@ function init3D() {
     animate();
 }
 
-function updateDestinationObject() {
+async function fetchRoute() {
+    if (!userLat || !userLon || !targetLat || !targetLon) return;
+
+    document.getElementById("instruction").innerText = "Fetching Map Route...";
+
+    // OSRM Public API for walking routing (returns GeoJSON LineString)
+    const url = `https://router.project-osrm.org/route/v1/walking/${userLon},${userLat};${targetLon},${targetLat}?geometries=geojson`;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.routes && data.routes.length > 0) {
+            routeCoordinates = data.routes[0].geometry.coordinates; // Array of [lon, lat]
+            updateRoute3D();
+        }
+    } catch (e) {
+        console.error("Routing Error:", e);
+        document.getElementById("instruction").innerText = "Map API Error";
+        updateRoute3D(); // fallback to straight line
+    }
+}
+
+function updateRoute3D() {
     if (userLat === null || targetLat === null) return;
 
-    // We treat the *first* GPS location as (0,0) in our 3D world, 
-    // or just dynamically move the target relative to our current (0,0) camera.
-    // For simplicity, we keep the camera at (0,0,0) and move the world objects relative to it.
+    const points = [];
 
-    const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
-    const dz = (userLat - targetLat) * 111320; // +z is South in webgl, so (user-target) is correct
+    if (routeCoordinates.length > 0) {
+        // Convert all geo-coordinates to local 3D points relative to user camera (0,0,0)
+        for (let coord of routeCoordinates) {
+            const cLon = coord[0];
+            const cLat = coord[1];
+            const dx = (cLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
+            const dz = (userLat - cLat) * 111320; // +z is South in webgl
+            points.push(new THREE.Vector3(dx, -1.9, dz)); // Place on ground
+        }
+    } else {
+        // Fallback: Straight line to target
+        const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
+        const dz = (userLat - targetLat) * 111320;
+        points.push(new THREE.Vector3(0, -1.9, 0));
+        points.push(new THREE.Vector3(dx, -1.9, dz));
+    }
 
-    // Create target if it doesn't exist
+    // Update Path Line Geometry
+    if (!pathLine) {
+        const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0x00ff00,
+            linewidth: 5,
+        });
+        const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+        pathLine = new THREE.Line(lineGeom, lineMaterial);
+        scene.add(pathLine);
+    } else {
+        pathLine.geometry.setFromPoints(points);
+        pathLine.computeLineDistances();
+    }
+
+    // Create Spline Curve for arrows to follow
+    if (points.length >= 2) {
+        // We use CatmullRomCurve3 to get a smooth path and easily calculate tangent angles
+        routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
+        routeLength = routeCurve.getLength();
+    }
+
+    // Update Destination Object (Marker) at the very last point
+    const lastPoint = points[points.length - 1];
     if (!destinationObject) {
         const geom = new THREE.CylinderGeometry(0, 1, 4, 16);
         const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
         destinationObject = new THREE.Mesh(geom, mat);
         scene.add(destinationObject);
 
-        // Add a pulsing ring below it
         const ringGeom = new THREE.RingGeometry(1, 1.5, 32);
         const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
         const ring = new THREE.Mesh(ringGeom, ringMat);
@@ -100,31 +159,7 @@ function updateDestinationObject() {
         ring.position.y = -2;
         destinationObject.add(ring);
     }
-
-    // Set absolute position relative to camera at (0,0,0)
-    destinationObject.position.set(dx, 0, dz);
-
-    // Update Path Line pointing strictly from below camera to the target
-    if (!pathLine) {
-        // Thick, bright green solid line for the road track
-        const lineMaterial = new THREE.LineBasicMaterial({
-            color: 0x00ff00,
-            linewidth: 5,
-        });
-        const lineGeom = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, -2, 0),
-            new THREE.Vector3(0, -2, -10) // temp
-        ]);
-        pathLine = new THREE.Line(lineGeom, lineMaterial);
-        scene.add(pathLine);
-    }
-
-    // Line array: from beneath the user up to the destination
-    pathLine.geometry.setFromPoints([
-        new THREE.Vector3(0, -2, 0),
-        new THREE.Vector3(dx, -2, dz)
-    ]);
-    pathLine.computeLineDistances();
+    destinationObject.position.set(lastPoint.x, 0, lastPoint.z);
 }
 
 function animate() {
@@ -136,50 +171,43 @@ function animate() {
 
     // No need to animate dash offset anymore since line is solid
 
-    if (destinationObject) {
-        destinationObject.rotation.y += 0.02; // spin
+    // Animate Arrows along the Spline Curve
+    if (routeCurve && routeLength > 0.1) {
+        const speed = 2.5; // units per second
+        const time = Date.now() * 0.001;
 
-        const dx = destinationObject.position.x;
-        const dz = destinationObject.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > 0.1) {
-            const dirX = dx / dist;
-            const dirZ = dz / dist;
+        for (let i = 0; i < maxArrows; i++) {
+            let rawDist = (time * speed + i * arrowSpacing);
+            // Cycle arrows within a max visual distance (e.g. 50 meters)
+            let maxViewWalk = Math.min(routeLength, 50);
+            let distAlong = rawDist % maxViewWalk;
 
-            // MATH FIX: atan2(x, z) gives the correct yaw rotation in Three.js (y-axis up)
-            const angle = Math.atan2(dx, dz);
+            // Parametric 't' value [0, 1] along the full curve
+            let t = distAlong / routeLength;
+            if (t > 1) t = 1;
 
-            const speed = 1.0; // slower floating pace
-            const time = Date.now() * 0.001;
+            if (distAlong > 0.5) { // offset from feet
+                pathArrows[i].visible = true;
 
-            for (let i = 0; i < maxArrows; i++) {
-                // To make a continuous flowing line of arrows, offset must perfectly cycle 
-                // between 0 and the full distance. We use dist as the modulo base.
-                // However, arrows too far away are useless, so we cap visual rendering
-                let rawOffset = (time * speed + i * arrowSpacing);
-                // Cycle the arrow back to start once it travels dist or a max visual range (e.g., 50m)
-                let loopDist = Math.min(dist, 50);
-                let offset = rawOffset % loopDist;
+                // 1) Get exact point on the curved road
+                const pt = routeCurve.getPointAt(t);
+                pathArrows[i].position.set(pt.x, -1.9, pt.z); // strictly on ground
 
-                // Arrows spawn immediately at feet (offset 0.5) and travel to loopDist
-                if (offset < dist && offset > 0.5) {
-                    pathArrows[i].visible = true;
-                    pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset);
+                // 2) Get exact tangent (direction) of the road at that point
+                const tangent = routeCurve.getTangentAt(t).normalize();
+                const angle = Math.atan2(tangent.x, tangent.z);
+                pathArrows[i].rotation.y = angle;
 
-                    // Apply exact angle to point forward along the line
-                    pathArrows[i].rotation.y = angle;
+                // 3) Fading math
+                let opacity = 0.9;
+                if (distAlong < 3) opacity = (distAlong / 3) * 0.9;
+                if (maxViewWalk - distAlong < 5) opacity = ((maxViewWalk - distAlong) / 5) * 0.9;
 
-                    // Smooth fade out at the very end of the loop distance
-                    let opacity = 0.9;
-                    if (offset < 3) opacity = (offset / 3) * 0.9;
-                    if (loopDist - offset < 5) opacity = ((loopDist - offset) / 5) * 0.9;
-
-                    pathArrows[i].children.forEach(c => {
-                        if (c.material) c.material.opacity = Math.max(0, opacity);
-                    });
-                } else {
-                    pathArrows[i].visible = false;
-                }
+                pathArrows[i].children.forEach(c => {
+                    if (c.material) c.material.opacity = Math.max(0, opacity);
+                });
+            } else {
+                pathArrows[i].visible = false;
             }
         }
     }
@@ -256,9 +284,16 @@ function getLocation() {
     if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
             position => {
+                const initFetching = (userLat === null && targetLat !== null);
                 userLat = position.coords.latitude;
                 userLon = position.coords.longitude;
-                updateDestinationObject();
+                // If it's the first GPS lock after choosing destination, fetch the map route
+                if (initFetching || routeCoordinates.length === 0) {
+                    if (targetLat !== null) fetchRoute();
+                } else {
+                    // Otherwise just update the relative 3D path based on new coords
+                    updateRoute3D();
+                }
             },
             error => {
                 console.error("Error getting location: ", error);
@@ -272,7 +307,12 @@ function getLocation() {
 function setDestination(lat, lon) {
     targetLat = lat;
     targetLon = lon;
-    updateDestinationObject();
+    if (userLat !== null && userLon !== null) {
+        fetchRoute();
+    } else {
+        // Wait for GPS watchPosition to trigger fetchRoute
+        document.getElementById("instruction").innerText = "Waiting for GPS to map route...";
+    }
 }
 
 function toRadians(deg) { return deg * (Math.PI / 180); }
