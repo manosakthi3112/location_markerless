@@ -25,24 +25,34 @@ body {
     pointer-events: none;
 }
 
-#ui-overlay h2,
+#ui-overlay h2 {
+    margin: 10px;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+    font-size: 28px;
+    font-weight: bold;
+}
+
 #ui-overlay p {
     margin: 10px;
     color: white;
-    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+    font-size: 20px;
+    font-weight: bold;
 }
 
 #ui-overlay button {
     pointer-events: auto;
-    margin: 5px;
-    padding: 10px 20px;
-    font-size: 16px;
+    margin: 8px;
+    padding: 15px 25px;
+    font-size: 20px;
+    font-weight: bold;
     cursor: pointer;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     background: #007bff;
     color: white;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     transition: background 0.3s;
 }
 

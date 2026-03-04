@@ -106,13 +106,10 @@ function updateDestinationObject() {
 
     // Update Path Line pointing strictly from below camera to the target
     if (!pathLine) {
-        const lineMaterial = new THREE.LineDashedMaterial({
-            color: 0x00aa00,
-            linewidth: 3,
-            dashSize: 1,
-            gapSize: 0.5,
-            transparent: true,
-            opacity: 0.5
+        // Thick, bright green solid line for the road track
+        const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0x00ff00,
+            linewidth: 5,
         });
         const lineGeom = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, -2, 0),
@@ -137,10 +134,7 @@ function animate() {
         controls.update();
     }
 
-    // Animate dash offset for the track line to look like a moving path
-    if (pathLine && pathLine.material) {
-        pathLine.material.dashOffset -= 0.05;
-    }
+    // No need to animate dash offset anymore since line is solid
 
     if (destinationObject) {
         destinationObject.rotation.y += 0.02; // spin
@@ -159,22 +153,26 @@ function animate() {
             const time = Date.now() * 0.001;
 
             for (let i = 0; i < maxArrows; i++) {
-                // Remove the Max to ensure continuous loop right from the start
-                let offset = (time * speed + i * arrowSpacing) % dist;
+                // To make a continuous flowing line of arrows, offset must perfectly cycle 
+                // between 0 and the full distance. We use dist as the modulo base.
+                // However, arrows too far away are useless, so we cap visual rendering
+                let rawOffset = (time * speed + i * arrowSpacing);
+                // Cycle the arrow back to start once it travels dist or a max visual range (e.g., 50m)
+                let loopDist = Math.min(dist, 50);
+                let offset = rawOffset % loopDist;
 
-                // Allow arrows to be visible almost immediately in front of user
+                // Arrows spawn immediately at feet (offset 0.5) and travel to loopDist
                 if (offset < dist && offset > 0.5) {
                     pathArrows[i].visible = true;
-                    // Move to exactly y = -1.9 so it sits perfectly ON top of the track line
                     pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset);
 
-                    // Apply exactly the angle so it rotates flat on the ground towards the target
+                    // Apply exact angle to point forward along the line
                     pathArrows[i].rotation.y = angle;
 
-                    // Keep arrows more opaque for longer, smooth fade near camera
+                    // Smooth fade out at the very end of the loop distance
                     let opacity = 0.9;
-                    if (offset < 3) opacity = (offset / 3) * 0.9; // gradual fade in right at feet
-                    if (dist - offset < 5) opacity = ((dist - offset) / 5) * 0.9; // fade out at target
+                    if (offset < 3) opacity = (offset / 3) * 0.9;
+                    if (loopDist - offset < 5) opacity = ((loopDist - offset) / 5) * 0.9;
 
                     pathArrows[i].children.forEach(c => {
                         if (c.material) c.material.opacity = Math.max(0, opacity);
