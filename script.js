@@ -159,18 +159,22 @@ function animate() {
             const time = Date.now() * 0.001;
 
             for (let i = 0; i < maxArrows; i++) {
-                let offset = (time * speed + i * arrowSpacing) % Math.max(dist, arrowSpacing * maxArrows);
-                if (offset < dist && offset > 1) { // starts slightly in front of user
+                // Remove the Max to ensure continuous loop right from the start
+                let offset = (time * speed + i * arrowSpacing) % dist;
+
+                // Allow arrows to be visible almost immediately in front of user (0.2 instead of 1)
+                if (offset < dist && offset > 0.2) {
                     pathArrows[i].visible = true;
-                    pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset); // slightly above line
+                    // Move slightly deeper down so it feels stuck to real floor, -2.5
+                    pathArrows[i].position.set(dirX * offset, -2.5, dirZ * offset);
 
                     // Apply exactly the angle so it rotates flat on the ground towards the target
                     pathArrows[i].rotation.y = angle;
 
-                    // fade out near destination or camera
-                    let opacity = 0.8;
-                    if (offset < 4) opacity = ((offset - 1) / 3) * 0.8;
-                    if (dist - offset < 2) opacity = (dist - offset) / 2 * 0.8;
+                    // Keep arrows more opaque for longer
+                    let opacity = 0.9;
+                    if (offset < 2) opacity = (offset / 2) * 0.9; // quick fade in right at feet
+                    if (dist - offset < 3) opacity = ((dist - offset) / 3) * 0.9; // fade out at target
 
                     pathArrows[i].children.forEach(c => {
                         if (c.material) c.material.opacity = Math.max(0, opacity);
