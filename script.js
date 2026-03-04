@@ -113,14 +113,14 @@ function updateRoute3D() {
             const cLat = coord[1];
             const dx = (cLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
             const dz = (userLat - cLat) * 111320; // +z is South in webgl
-            points.push(new THREE.Vector3(dx, -1.9, dz)); // Place on ground
+            points.push(new THREE.Vector3(dx, -2.5, dz)); // Place on ground
         }
     } else {
         // Fallback: Straight line to target
         const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
         const dz = (userLat - targetLat) * 111320;
-        points.push(new THREE.Vector3(0, -1.9, 0));
-        points.push(new THREE.Vector3(dx, -1.9, dz));
+        points.push(new THREE.Vector3(0, -2.5, 0));
+        points.push(new THREE.Vector3(dx, -2.5, dz));
     }
 
     // Update Path Line Geometry
@@ -191,7 +191,7 @@ function animate() {
 
                 // 1) Get exact point on the curved road
                 const pt = routeCurve.getPointAt(t);
-                pathArrows[i].position.set(pt.x, -1.9, pt.z); // strictly on ground
+                pathArrows[i].position.set(pt.x, -2.5, pt.z); // strictly on ground down deep
 
                 // 2) Get exact tangent (direction) of the road at that point
                 const tangent = routeCurve.getTangentAt(t).normalize();
@@ -248,17 +248,26 @@ function updateInstructions() {
         }
     }
 
-    // Calculate angle difference between camera viewing direction and target direction
+    // Calculate angle difference between camera viewing direction and CURRENT path direction
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     cameraDirection.y = 0; // project to XZ plane
     cameraDirection.normalize();
 
-    const targetDirection = new THREE.Vector3(
-        destinationObject.position.x,
-        0,
-        destinationObject.position.z
-    ).normalize();
+    let targetDirection = new THREE.Vector3();
+
+    // If we have a smooth curved route, measure the angle to the immediate chunk of road ahead (e.g. 5 meters)
+    if (routeCurve && routeLength > 5) {
+        let lookAheadDistance = 5;
+        let t = lookAheadDistance / routeLength;
+        if (t > 1) t = 1;
+
+        const pathPoint = routeCurve.getPointAt(t);
+        targetDirection.set(pathPoint.x, 0, pathPoint.z).normalize();
+    } else if (destinationObject) {
+        // Fallback to absolute destination if route hasn't loaded 
+        targetDirection.set(destinationObject.position.x, 0, destinationObject.position.z).normalize();
+    }
 
     // Cross product to get left/right, dot product for forward/backward
     const cross = new THREE.Vector3().crossVectors(cameraDirection, targetDirection);
