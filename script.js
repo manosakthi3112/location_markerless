@@ -81,8 +81,19 @@ function setDestination(lat, lon) {
 }
 
 function getOrientation() {
+    window.addEventListener("deviceorientationabsolute", event => {
+        if (event.alpha !== null) {
+            deviceHeading = 360 - event.alpha;
+            updateDirection();
+        }
+    });
+
     window.addEventListener("deviceorientation", event => {
-        deviceHeading = event.alpha;
+        if (event.webkitCompassHeading) {
+            deviceHeading = event.webkitCompassHeading;
+        } else if (event.alpha !== null) {
+            deviceHeading = 360 - event.alpha;
+        }
         updateDirection();
     });
 }
@@ -129,18 +140,41 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 function updateDirection() {
 
-    if (!userLat || !targetLat || !deviceHeading) return;
+    if (userLat == null || targetLat == null || deviceHeading == null) return;
 
     const bearing = calculateBearing(userLat, userLon, targetLat, targetLon);
-    const rotation = bearing - deviceHeading;
+    let rotation = bearing - deviceHeading;
 
-    if (directionGroup) {
-        directionGroup.rotation.z = toRadians(rotation);
+    // Normalize rotation to -180 to 180 degrees
+    if (rotation > 180) {
+        rotation -= 360;
+    } else if (rotation < -180) {
+        rotation += 360;
     }
 
+    if (directionGroup) {
+        // Invert rotation so pointing Left/Right maps well onto Z-axis rotation
+        directionGroup.rotation.z = toRadians(-rotation);
+    }
+
+    // Determine Turn Instruction
+    let instruction = "Go Straight";
+    if (rotation > 15 && rotation < 165) {
+        instruction = "Turn Right \u2192";
+    } else if (rotation < -15 && rotation > -165) {
+        instruction = "\u2190 Turn Left";
+    } else if (Math.abs(rotation) >= 165) {
+        instruction = "Turn Around \u21bb";
+    } else {
+        instruction = "\u2191 Go Straight";
+    }
+
+    const instructionEl = document.getElementById("instruction");
+    if (instructionEl) instructionEl.innerText = instruction;
+
     const distance = calculateDistance(userLat, userLon, targetLat, targetLon);
-    document.getElementById("distance").innerText =
-        "Distance: " + distance.toFixed(2) + " meters";
+    const distanceEl = document.getElementById("distance");
+    if (distanceEl) distanceEl.innerText = "Distance: " + distance.toFixed(2) + " meters";
 }
 
 // Open device camera for markerless AR background
