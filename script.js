@@ -4,8 +4,8 @@ let targetLat = null, targetLon = null;
 let destinationObject = null;
 let pathLine = null;
 let pathArrows = [];
-let maxArrows = 20;
-let arrowSpacing = 3; // meters
+let maxArrows = 15;
+let arrowSpacing = 4.5; // meters
 let hasStarted = false;
 
 // 1 degree of latitude is ~111km. So 111,000 meters
@@ -13,28 +13,33 @@ const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
 
 function createRoadArrow() {
+    // Street View Chevron Shape
     const shape = new THREE.Shape();
-    shape.moveTo(0, 1.0);
-    shape.lineTo(0.6, -0.4);
-    shape.lineTo(0.25, -0.4);
-    shape.lineTo(0.25, -1.5);
-    shape.lineTo(-0.25, -1.5);
-    shape.lineTo(-0.25, -0.4);
-    shape.lineTo(-0.6, -0.4);
-    shape.lineTo(0, 1.0);
+    shape.moveTo(0, 1.2);
+    shape.lineTo(1.2, -0.4);
+    shape.lineTo(0.8, -0.7);
+    shape.lineTo(0, 0.4);
+    shape.lineTo(-0.8, -0.7);
+    shape.lineTo(-1.2, -0.4);
+    shape.lineTo(0, 1.2);
 
     const geometry = new THREE.ShapeGeometry(shape);
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    // Soft white color like Google Street View
+    const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.rotation.x = Math.PI / 2;
+    mesh.position.y = 0.02; // elevate slightly above shadow
 
-    const edges = new THREE.EdgesGeometry(geometry);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
-    line.rotation.x = Math.PI / 2;
+    // Drop shadow chevron for depth
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    const shadowMesh = new THREE.Mesh(geometry, shadowMat);
+    shadowMesh.rotation.x = Math.PI / 2;
+    shadowMesh.scale.set(1.1, 1.1, 1.1);
+    shadowMesh.position.set(0, -0.01, -0.1);
 
     const group = new THREE.Group();
     group.add(mesh);
-    group.add(line);
+    group.add(shadowMesh);
     return group;
 }
 
@@ -144,7 +149,7 @@ function animate() {
             const dirZ = dz / dist;
             const angle = Math.atan2(dx, dz);
 
-            const speed = 2.5; // meters per sec
+            const speed = 1.0; // slower floating pace
             const time = Date.now() * 0.001;
 
             for (let i = 0; i < maxArrows; i++) {
