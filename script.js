@@ -4,8 +4,8 @@ let targetLat = null, targetLon = null;
 let destinationObject = null;
 let pathLine = null;
 let pathArrows = [];
-let maxArrows = 8;
-let arrowSpacing = 8.0; // meters
+let maxArrows = 15;
+let arrowSpacing = 5.0; // meters
 let hasStarted = false;
 
 // 1 degree of latitude is ~111km. So 111,000 meters
@@ -13,15 +13,15 @@ const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
 
 function createRoadArrow() {
-    // Street View Chevron Shape - MUCH BIGGER
+    // Street View Chevron Shape (more reasonably sized)
     const shape = new THREE.Shape();
-    shape.moveTo(0, 3.6);
-    shape.lineTo(3.6, -1.2);
-    shape.lineTo(2.4, -2.1);
-    shape.lineTo(0, 1.2);
-    shape.lineTo(-2.4, -2.1);
-    shape.lineTo(-3.6, -1.2);
-    shape.lineTo(0, 3.6);
+    shape.moveTo(0, 1.5);
+    shape.lineTo(1.5, -0.5);
+    shape.lineTo(1.0, -0.9);
+    shape.lineTo(0, 0.5);
+    shape.lineTo(-1.0, -0.9);
+    shape.lineTo(-1.5, -0.5);
+    shape.lineTo(0, 1.5);
 
     const geometry = new THREE.ShapeGeometry(shape);
     // Bold white color like Google Street View
@@ -30,7 +30,7 @@ function createRoadArrow() {
     mesh.rotation.x = Math.PI / 2;
     mesh.position.y = 0.05; // elevate slightly above shadow
 
-    // Deeper Drop shadow chevron for contrast on the road
+    // Deeper Drop shadow chevron
     const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
     shadowMesh.rotation.x = Math.PI / 2;
@@ -41,8 +41,8 @@ function createRoadArrow() {
     group.add(mesh);
     group.add(shadowMesh);
 
-    // Ensure it's massive
-    group.scale.set(1.5, 1.5, 1.5);
+    // Scale moderately so perspective works better over distance
+    group.scale.set(0.7, 0.7, 0.7);
 
     return group;
 }
@@ -162,19 +162,19 @@ function animate() {
                 // Remove the Max to ensure continuous loop right from the start
                 let offset = (time * speed + i * arrowSpacing) % dist;
 
-                // Allow arrows to be visible almost immediately in front of user (0.2 instead of 1)
-                if (offset < dist && offset > 0.2) {
+                // Allow arrows to be visible almost immediately in front of user
+                if (offset < dist && offset > 0.5) {
                     pathArrows[i].visible = true;
-                    // Move slightly deeper down so it feels stuck to real floor, -2.5
-                    pathArrows[i].position.set(dirX * offset, -2.5, dirZ * offset);
+                    // Move to exactly y = -1.9 so it sits perfectly ON top of the track line
+                    pathArrows[i].position.set(dirX * offset, -1.9, dirZ * offset);
 
                     // Apply exactly the angle so it rotates flat on the ground towards the target
                     pathArrows[i].rotation.y = angle;
 
-                    // Keep arrows more opaque for longer
+                    // Keep arrows more opaque for longer, smooth fade near camera
                     let opacity = 0.9;
-                    if (offset < 2) opacity = (offset / 2) * 0.9; // quick fade in right at feet
-                    if (dist - offset < 3) opacity = ((dist - offset) / 3) * 0.9; // fade out at target
+                    if (offset < 3) opacity = (offset / 3) * 0.9; // gradual fade in right at feet
+                    if (dist - offset < 5) opacity = ((dist - offset) / 5) * 0.9; // fade out at target
 
                     pathArrows[i].children.forEach(c => {
                         if (c.material) c.material.opacity = Math.max(0, opacity);
