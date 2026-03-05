@@ -8,6 +8,13 @@ let maxArrows = 15;
 let arrowSpacing = 2.0; // meters (denser)
 let hasStarted = false;
 
+// Leaflet Map Globals
+let leafletMap = null;
+let userMarker = null;
+let targetMarker = null;
+let mapRouteLine = null;
+let isMapExpanded = false;
+
 // Routing API Globals
 let routeCoordinates = []; // GeoJSON [lon, lat] array from OSRM
 let routeCurve = null;     // THREE.CatmullRomCurve3
@@ -195,6 +202,39 @@ function calculateCustomRoute() {
     // Path not found, fallback
     routeCoordinates = [];
     updateRoute3D();
+    updateLeafletRoute();
+}
+
+function updateLeafletRoute() {
+    if (!leafletMap) return;
+
+    // Draw target marker
+    if (targetLat !== null && targetLon !== null) {
+        if (!targetMarker) {
+            targetMarker = L.marker([targetLat, targetLon]).addTo(leafletMap);
+        } else {
+            targetMarker.setLatLng([targetLat, targetLon]);
+        }
+    }
+
+    // Draw route line
+    if (mapRouteLine) {
+        leafletMap.removeLayer(mapRouteLine);
+        mapRouteLine = null;
+    }
+
+    if (routeCoordinates.length > 0) {
+        // routeCoordinates is an array of [lon, lat], Leaflet needs [lat, lon]
+        const latlngs = routeCoordinates.map(coord => [coord[1], coord[0]]);
+
+        mapRouteLine = L.polyline(latlngs, { color: '#1e88e5', weight: 5, opacity: 0.8 }).addTo(leafletMap);
+
+        // Fit bounds to show route
+        if (userLat !== null && userLon !== null) {
+            const bounds = L.latLngBounds([userLat, userLon], [targetLat, targetLon]);
+            leafletMap.fitBounds(bounds, { padding: [20, 20] });
+        }
+    }
 }
 
 function updateRoute3D() {
@@ -451,6 +491,23 @@ function getLocation() {
                     // Otherwise just update the relative 3D path based on new coords
                     updateRoute3D();
                 }
+
+                // Update Leaflet Map
+                if (leafletMap) {
+                    if (!userMarker) {
+                        // Custom blue dot for user
+                        const userIcon = L.divIcon({
+                            className: 'custom-user-marker',
+                            html: '<div style="background-color: #1e88e5; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
+                            iconSize: [20, 20],
+                            iconAnchor: [10, 10]
+                        });
+                        userMarker = L.marker([userLat, userLon], { icon: userIcon }).addTo(leafletMap);
+                        leafletMap.setView([userLat, userLon], 18); // Zoom in on first lock
+                    } else {
+                        userMarker.setLatLng([userLat, userLon]);
+                    }
+                }
             },
             error => {
                 console.error("Error getting location: ", error);
@@ -543,6 +600,9 @@ function startAR(destinationName, lat, lon) {
     // Start 3D
     init3D();
 
+    // Start 2D Map
+    initMap();
+
     // Set target first
     targetLat = lat;
     targetLon = lon;
@@ -592,7 +652,48 @@ function stopAR() {
     pathArrows = [];
     routeCoordinates = [];
 
+    // Clean up Leaflet Map
+    if (leafletMap) {
+        leafletMap.remove();
+        leafletMap = null;
+        userMarker = null;
+        targetMarker = null;
+        mapRouteLine = null;
+        isMapExpanded = false;
+        document.getElementById("minimap-container").classList.remove("expanded");
+        document.getElementById("toggle-map-btn").innerText = "⛶ Expand";
+    }
+
     showCategories();
+}
+
+function initMap() {
+    if (leafletMap) return;
+
+    leafletMap = L.map('map', {
+        zoomControl: false,
+        attributionControl: false
+    }).setView([10.641123, 77.029058], 15); // Default campus center
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(leafletMap);
+}
+
+function toggleMap() {
+    isMapExpanded = !isMapExpanded;
+    const container = document.getElementById("minimap-container");
+    const btn = document.getElementById("toggle-map-btn");
+
+    if (isMapExpanded) {
+        container.classList.add("expanded");
+        btn.innerText = "⛕ Collapse";
+    } else {
+        container.classList.remove("expanded");
+        btn.innerText = "⛶ Expand";
+    }
+
+    setTimeout(() => {
+        if (leafletMap) leafletMap.invalidateSize();
+    }, 350);
 }
 
 function startCamera() {
