@@ -225,9 +225,18 @@ function updateLeafletRoute() {
 
     if (routeCoordinates.length > 0) {
         // routeCoordinates is an array of [lon, lat], Leaflet needs [lat, lon]
-        const latlngs = routeCoordinates.map(coord => [coord[1], coord[0]]);
+        let latlngs = routeCoordinates.map(coord => [coord[1], coord[0]]);
 
-        mapRouteLine = L.polyline(latlngs, { color: '#1e88e5', weight: 5, opacity: 0.8 }).addTo(leafletMap);
+        // Ensure path starts from current user location (e.g. going out of room)
+        if (userLat !== null && userLon !== null) {
+            latlngs.unshift([userLat, userLon]);
+        }
+
+        // Google Maps style path (thick blue border, lighter blue inside)
+        const outerLine = L.polyline(latlngs, { color: '#1a73e8', weight: 8, opacity: 0.9 });
+        const innerLine = L.polyline(latlngs, { color: '#4285f4', weight: 4, opacity: 1.0 });
+
+        mapRouteLine = L.layerGroup([outerLine, innerLine]).addTo(leafletMap);
 
         // Fit bounds to show route
         if (userLat !== null && userLon !== null) {
@@ -675,7 +684,11 @@ function initMap() {
         attributionControl: false
     }).setView([10.641123, 77.029058], 15); // Default campus center
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(leafletMap);
+    // Google Maps Tile Layer
+    L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    }).addTo(leafletMap);
 }
 
 function toggleMap() {
