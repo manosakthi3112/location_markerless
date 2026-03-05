@@ -22,8 +22,13 @@
     <div id="menu-overlay" class="overlay-container">
         <!-- Categories View -->
         <div id="categories-view">
-            <h2>Select Destination Category</h2>
-            <div class="menu-grid">
+            <!-- Smart Search bar -->
+            <div id="search-container">
+                <input type="text" id="search-input" placeholder="🔍 Search destination..." oninput="handleSearch()">
+            </div>
+
+            <h2 id="main-view-title">Select Destination Category</h2>
+            <div id="main-menu-grid" class="menu-grid">
                 <button class="menu-btn" onclick="showLocations('Classrooms')">🏫 Classrooms</button>
                 <button class="menu-btn" onclick="showLocations('Labs')">🔬 Labs</button>
                 <button class="menu-btn" onclick="showLocations('Offices')">🏢 Offices</button>

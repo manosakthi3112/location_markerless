@@ -1,3 +1,385 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>3D Web Navigation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DeviceOrientationControls.js"></script>
+
+    <!-- Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+body {
+    margin: 0;
+    text-align: center;
+    font-family: 'Roboto', Arial, sans-serif;
+    /* Google Fonts style */
+    overflow: hidden;
+    background-color: #000;
+}
+
+#camera-feed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    z-index: -1;
+}
+
+#ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* TOP GOOGLE MAPS STYLE INSTRUCTION HEADER */
+#top-nav-panel {
+    background: #1e88e5;
+    /* Maps Blue */
+    color: white;
+    margin: 15px;
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    pointer-events: auto;
+}
+
+.nav-icon-container {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.nav-text-container {
+    text-align: left;
+}
+
+#instruction {
+    margin: 0;
+    font-size: 28px;
+    /* Bigger text */
+    font-weight: bold;
+}
+
+#distance {
+    margin: 5px 0 0 0;
+    font-size: 18px;
+    /* Bigger text */
+    opacity: 0.9;
+}
+
+/* MIDDLE TOOLS (LIKE FLOATING ACTION BUTTONS) */
+#middle-tools {
+    pointer-events: auto;
+    position: absolute;
+    right: 15px;
+    top: 130px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+#current-coords {
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+/* BOTTOM SHEET GOOGLE MAPS STYLE */
+#bottom-sheet {
+    background: white;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.2);
+    pointer-events: auto;
+    text-align: left;
+}
+
+.sheet-handle {
+    width: 40px;
+    height: 5px;
+    background: #ccc;
+    border-radius: 5px;
+    margin: 0 auto 15px auto;
+}
+
+.destination-title {
+    margin: 0 0 5px 0;
+    color: #333;
+    font-size: 22px;
+}
+
+.destination-subtitle {
+    margin: 0 0 20px 0;
+    color: #777;
+    font-size: 14px;
+}
+
+.primary-btn {
+    width: 100%;
+    padding: 15px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    border-radius: 25px;
+    background: #1e88e5;
+    color: white;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transition: background 0.3s;
+}
+
+.primary-btn:hover {
+    background: #1565c0;
+}
+
+#like-btn {
+    background: #ff4757 !important;
+}
+
+#like-btn.liked {
+    background: #2ed573 !important;
+}
+
+#container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+}
+
+/* MENU SYSTEM STYLES */
+.overlay-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+}
+
+.menu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    padding: 20px;
+    max-width: 400px;
+}
+
+#search-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto 20px auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+#search-input {
+    width: 100%;
+    padding: 15px 20px;
+    border-radius: 25px;
+    border: none;
+    font-size: 16px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    outline: none;
+    transition: box-shadow 0.3s ease;
+}
+
+#search-input:focus {
+    box-shadow: 0 6px 15px rgba(26, 115, 232, 0.4);
+}
+
+.menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 20px;
+    width: 300px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.menu-btn {
+    padding: 20px;
+    font-size: 18px;
+    background: #1e88e5;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s;
+}
+
+.menu-btn:active {
+    transform: scale(0.95);
+}
+
+.back-btn {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: transparent;
+    border: 2px solid white;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+/* Minimap Styles */
+#minimap-container {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+    border: 3px solid white;
+}
+
+#minimap-container.expanded {
+    width: calc(100vw - 30px);
+    height: 40vh;
+    bottom: 250px;
+    /* Above bottom sheet roughly */
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+#toggle-map-btn {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    z-index: 400;
+    /* Above leafet controls */
+}
+
+#toggle-map-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+</style>
+</head>
+
+<body>
+    <video id="camera-feed" autoplay playsinline></video>
+
+    <!-- Main Menu Overlay -->
+    <div id="menu-overlay" class="overlay-container">
+        <!-- Categories View -->
+        <div id="categories-view">
+            <!-- Smart Search bar -->
+            <div id="search-container">
+                <input type="text" id="search-input" placeholder="🔍 Search destination..." oninput="handleSearch()">
+            </div>
+
+            <h2 id="main-view-title">Select Destination Category</h2>
+            <div id="main-menu-grid" class="menu-grid">
+                <button class="menu-btn" onclick="showLocations('Classrooms')">🏫 Classrooms</button>
+                <button class="menu-btn" onclick="showLocations('Labs')">🔬 Labs</button>
+                <button class="menu-btn" onclick="showLocations('Offices')">🏢 Offices</button>
+                <button class="menu-btn" onclick="showLocations('Cafeteria')">🍔 Cafeteria</button>
+                <button class="menu-btn" onclick="showLocations('Restrooms')">🚻 Restrooms</button>
+            </div>
+        </div>
+
+        <!-- Locations View (Hidden initially) -->
+        <div id="locations-view" style="display: none;">
+            <button class="back-btn" onclick="showCategories()">← Back</button>
+            <h2 id="category-title">Locations</h2>
+            <div id="locations-list" class="menu-list">
+                <!-- Dynamically populated buttons go here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="ui-overlay" style="display: none;">
+        <!-- Top Navigation Header -->
+        <div id="top-nav-panel">
+            <div class="nav-icon-container" style="width: 60px; height: 60px;">
+                <span id="nav-arrow" style="font-size: 40px; line-height: 1;">↑</span>
+            </div>
+            <div class="nav-text-container">
+                <h3 id="instruction">Waiting for GPS...</h3>
+                <p id="distance">--</p>
+            </div>
+        </div>
+
+        <!-- Middle Tools -->
+        <div id="middle-tools">
+            <button id="like-btn" onclick="toggleLike()">❤️ Like</button>
+            <p id="current-coords"></p>
+        </div>
+
+        <!-- Bottom Sheet -->
+        <div id="bottom-sheet">
+            <div class="sheet-handle"></div>
+            <h2 id="ar-destination-title" class="destination-title">Target Destination</h2>
+            <p class="destination-subtitle">Markerless Navigation</p>
+            <button class="menu-btn" style="background: #ff4757; margin-top: 10px;" onclick="stopAR()">
+                End Navigation
+            </button>
+        </div>
+
+        <!-- Minimap Container -->
+        <div id="minimap-container">
+            <div id="map"></div>
+            <button id="toggle-map-btn" onclick="toggleMap()">⛶ Expand</button>
+        </div>
+    </div>
+
+    <div id="container"></div>
+
+    <script>
 let scene, camera, renderer, controls;
 let userLat = null, userLon = null;
 let targetLat = null, targetLon = null;
@@ -110,37 +492,67 @@ let CAMPUS_EDGES = {};
 let graphLoaded = false;
 
 // Load graph data automatically from the generated JSON file
-async function loadGraphData() {
-    try {
-        const response = await fetch('campus_nodes.json');
-
-        if (!response.ok) {
-            console.warn("campus_nodes.json not found on server yet. Run the admin map tool and place it in the folder!");
-            return;
-        }
-
-        CAMPUS_NODES = await response.json();
-
-        // Auto-generate edges for points within 25 meters walking distance
-        CAMPUS_EDGES = {};
-        const MAX_CONNECT_DIST = 25;
-
-        for (let id1 in CAMPUS_NODES) {
-            CAMPUS_EDGES[id1] = [];
-            for (let id2 in CAMPUS_NODES) {
-                if (id1 !== id2) {
-                    let d = calculateDistance(CAMPUS_NODES[id1].lat, CAMPUS_NODES[id1].lon, CAMPUS_NODES[id2].lat, CAMPUS_NODES[id2].lon);
-                    if (d <= MAX_CONNECT_DIST) {
-                        CAMPUS_EDGES[id1].push(id2);
-                    }
+function loadGraphData() {
+    CAMPUS_NODES = {
+    "n1": {
+        "lat": 10.678645292206777,
+        "lon": 77.03241813758794
+    },
+    "n2": {
+        "lat": 10.67871116813318,
+        "lon": 77.03241545501773
+    },
+    "n3": {
+        "lat": 10.678777044045335,
+        "lon": 77.03242082015814
+    },
+    "n4": {
+        "lat": 10.678864000227456,
+        "lon": 77.03162946194455
+    },
+    "n5": {
+        "lat": 10.678885080510288,
+        "lon": 77.03180114643835
+    },
+    "n6": {
+        "lat": 10.678895620651142,
+        "lon": 77.03194868780022
+    },
+    "n7": {
+        "lat": 10.678895620651142,
+        "lon": 77.0320854988812
+    },
+    "n8": {
+        "lat": 10.67888771554553,
+        "lon": 77.03224913566436
+    },
+    "n9": {
+        "lat": 10.678900890721449,
+        "lon": 77.03242350272839
+    },
+    "n10": {
+        "lat": 10.678835014836164,
+        "lon": 77.03232961277082
+    },
+    "n11": {
+        "lat": 10.678737518499766,
+        "lon": 77.0323215650602
+    }
+};
+    CAMPUS_EDGES = {};
+    const MAX_CONNECT_DIST = 25;
+    for (let id1 in CAMPUS_NODES) {
+        CAMPUS_EDGES[id1] = [];
+        for (let id2 in CAMPUS_NODES) {
+            if (id1 !== id2) {
+                let d = calculateDistance(CAMPUS_NODES[id1].lat, CAMPUS_NODES[id1].lon, CAMPUS_NODES[id2].lat, CAMPUS_NODES[id2].lon);
+                if (d <= MAX_CONNECT_DIST) {
+                    CAMPUS_EDGES[id1].push(id2);
                 }
             }
         }
-        graphLoaded = true;
-        console.log("Graph Generated! Nodes:", Object.keys(CAMPUS_NODES).length);
-    } catch (e) {
-        console.error("Invalid graph JSON", e);
     }
+    graphLoaded = true;
 }
 
 function findNearestNode(lat, lon) {
@@ -913,3 +1325,8 @@ function toggleLike() {
 
 // Automatically load the graph data when the script starts
 loadGraphData();
+</script>
+
+</body>
+
+</html>
