@@ -83,25 +83,118 @@ function init3D() {
     animate();
 }
 
-async function fetchRoute() {
-    if (!userLat || !userLon || !targetLat || !targetLon) return;
+/* ================= ADVANCED CUSTOM AR ROUTING (A* ALGORITHM) ================= */
+// Pre-defined Campus Graph to route precisely around walls (Example)
+// Coordinates should be replaced with actual walkable corners on campus
+const CAMPUS_NODES = {
+    'n1': { lat: 10.641123, lon: 77.029058 }, // Starting point outside
+    'n2': { lat: 10.641200, lon: 77.029058 }, // Move North
+    'n3': { lat: 10.641200, lon: 77.029500 }, // Move East down a hall
+    'n4': { lat: 10.641500, lon: 77.029500 }, // Room 101 area
+    'n5': { lat: 10.641600, lon: 77.029600 }  // Room 102 area
+};
 
-    document.getElementById("instruction").innerText = "Fetching Map Route...";
+const CAMPUS_EDGES = {
+    'n1': ['n2'],
+    'n2': ['n1', 'n3'],
+    'n3': ['n2', 'n4', 'n5'],
+    'n4': ['n3'],
+    'n5': ['n3']
+};
 
-    // OSRM Public API for walking routing (returns GeoJSON LineString)
-    const url = `https://router.project-osrm.org/route/v1/walking/${userLon},${userLat};${targetLon},${targetLat}?geometries=geojson`;
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.routes && data.routes.length > 0) {
-            routeCoordinates = data.routes[0].geometry.coordinates; // Array of [lon, lat]
-            updateRoute3D();
+function findNearestNode(lat, lon) {
+    let nearestID = null;
+    let minDist = Infinity;
+    for (const [id, node] of Object.entries(CAMPUS_NODES)) {
+        const d = calculateDistance(lat, lon, node.lat, node.lon);
+        if (d < minDist) {
+            minDist = d;
+            nearestID = id;
         }
-    } catch (e) {
-        console.error("Routing Error:", e);
-        document.getElementById("instruction").innerText = "Map API Error";
-        updateRoute3D(); // fallback to straight line
     }
+    return nearestID;
+}
+
+function calculateCustomRoute() {
+    if (userLat === null || targetLat === null) return;
+
+    document.getElementById("instruction").innerText = "Calculating Custom AR Route...";
+
+    // 1. Find nearest graph node to User and Target
+    const startId = findNearestNode(userLat, userLon);
+    const targetId = findNearestNode(targetLat, targetLon);
+
+    if (!startId || !targetId) {
+        routeCoordinates = []; // Fallback to straight line
+        updateRoute3D();
+        return;
+    }
+
+    // 2. A* Pathfinding Algorithm
+    let openSet = [startId];
+    let cameFrom = {};
+    let gScore = {};
+    let fScore = {};
+
+    for (let node in CAMPUS_NODES) {
+        gScore[node] = Infinity;
+        fScore[node] = Infinity;
+    }
+
+    gScore[startId] = 0;
+    fScore[startId] = calculateDistance(CAMPUS_NODES[startId].lat, CAMPUS_NODES[startId].lon, CAMPUS_NODES[targetId].lat, CAMPUS_NODES[targetId].lon);
+
+    while (openSet.length > 0) {
+        // Get node with lowest fScore
+        let current = openSet[0];
+        let lowestF = fScore[current];
+        for (let i = 1; i < openSet.length; i++) {
+            if (fScore[openSet[i]] < lowestF) {
+                lowestF = fScore[openSet[i]];
+                current = openSet[i];
+            }
+        }
+
+        if (current === targetId) {
+            // Reconstruct path
+            let pathIds = [current];
+            while (cameFrom[current]) {
+                current = cameFrom[current];
+                pathIds.unshift(current);
+            }
+
+            // Build routeCoordinates array [lon, lat] for the 3D engine
+            routeCoordinates = pathIds.map(id => [CAMPUS_NODES[id].lon, CAMPUS_NODES[id].lat]);
+
+            // 3. To make it super accurate, push the exact final target coordinates at the very end
+            routeCoordinates.push([targetLon, targetLat]);
+
+            updateRoute3D();
+            return;
+        }
+
+        openSet = openSet.filter(node => node !== current);
+
+        let neighbors = CAMPUS_EDGES[current] || [];
+        for (let neighbor of neighbors) {
+            const d = calculateDistance(CAMPUS_NODES[current].lat, CAMPUS_NODES[current].lon, CAMPUS_NODES[neighbor].lat, CAMPUS_NODES[neighbor].lon);
+            let tentative_gScore = gScore[current] + d;
+
+            if (tentative_gScore < gScore[neighbor]) {
+                cameFrom[neighbor] = current;
+                gScore[neighbor] = tentative_gScore;
+                fScore[neighbor] = gScore[neighbor] + calculateDistance(CAMPUS_NODES[neighbor].lat, CAMPUS_NODES[neighbor].lon, CAMPUS_NODES[targetId].lat, CAMPUS_NODES[targetId].lon);
+
+                if (!openSet.includes(neighbor)) {
+                    openSet.push(neighbor);
+                }
+            }
+        }
+    }
+
+    // Path not found, fallback
+    routeCoordinates = [];
+    updateRoute3D();
 }
 
 function updateRoute3D() {
@@ -351,9 +444,9 @@ function getLocation() {
                     coordsEl.innerText = `My Location: ${userLat.toFixed(6)}, ${userLon.toFixed(6)}`;
                 }
 
-                // If it's the first GPS lock after choosing destination, fetch the map route
+                // If it's the first GPS lock after choosing destination, calculate custom route
                 if (initFetching || routeCoordinates.length === 0) {
-                    if (targetLat !== null) fetchRoute();
+                    if (targetLat !== null) calculateCustomRoute();
                 } else {
                     // Otherwise just update the relative 3D path based on new coords
                     updateRoute3D();
@@ -372,10 +465,10 @@ function setDestination(lat, lon) {
     targetLat = lat;
     targetLon = lon;
     if (userLat !== null && userLon !== null) {
-        fetchRoute();
+        calculateCustomRoute();
     } else {
-        // Wait for GPS watchPosition to trigger fetchRoute
-        document.getElementById("instruction").innerText = "Waiting for GPS to map route...";
+        // Wait for GPS watchPosition to trigger calculation
+        document.getElementById("instruction").innerText = "Waiting for GPS to calculate custom route...";
     }
 }
 
