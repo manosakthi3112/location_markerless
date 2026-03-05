@@ -14,7 +14,7 @@ let routeCurve = null;     // THREE.CatmullRomCurve3
 let routeLength = 0;       // Length of the spline curve
 
 // Constants for Progressive Rendering
-const VISIBLE_PATH_AHEAD = 10; // Only show exactly 10 meters of track line and arrows ahead
+const VISIBLE_PATH_AHEAD = 30; // Show exactly 30 meters of track line ahead so turns are visible
 
 // 1 degree of latitude is ~111km. So 111,000 meters
 const M_PER_DEG_LAT = 111320;
