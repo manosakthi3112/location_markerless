@@ -11,10 +11,28 @@
 <body>
     <video id="camera-feed" autoplay playsinline></video>
 
-    <div id="start-overlay">
-        <h2>Advanced AR Navigation</h2>
-        <p>This experience requires access to your camera, GPS, and device orientation.</p>
-        <button id="start-btn" onclick="startAR()">Start AR Mode</button>
+    <!-- Main Menu Overlay -->
+    <div id="menu-overlay" class="overlay-container">
+        <!-- Categories View -->
+        <div id="categories-view">
+            <h2>Select Destination Category</h2>
+            <div class="menu-grid">
+                <button class="menu-btn" onclick="showLocations('Classrooms')">🏫 Classrooms</button>
+                <button class="menu-btn" onclick="showLocations('Labs')">🔬 Labs</button>
+                <button class="menu-btn" onclick="showLocations('Offices')">🏢 Offices</button>
+                <button class="menu-btn" onclick="showLocations('Cafeteria')">🍔 Cafeteria</button>
+                <button class="menu-btn" onclick="showLocations('Restrooms')">🚻 Restrooms</button>
+            </div>
+        </div>
+
+        <!-- Locations View (Hidden initially) -->
+        <div id="locations-view" style="display: none;">
+            <button class="back-btn" onclick="showCategories()">← Back</button>
+            <h2 id="category-title">Locations</h2>
+            <div id="locations-list" class="menu-list">
+                <!-- Dynamically populated buttons go here -->
+            </div>
+        </div>
     </div>
 
     <div id="ui-overlay" style="display: none;">
@@ -38,10 +56,10 @@
         <!-- Bottom Sheet -->
         <div id="bottom-sheet">
             <div class="sheet-handle"></div>
-            <h2 class="destination-title">Target Destination</h2>
+            <h2 id="ar-destination-title" class="destination-title">Target Destination</h2>
             <p class="destination-subtitle">Markerless Navigation</p>
-            <button class="primary-btn" onclick="setDestination(10.641123, 77.029058)">
-                Start Directions
+            <button class="menu-btn" style="background: #ff4757; margin-top: 10px;" onclick="stopAR()">
+                End Navigation
             </button>
         </div>
     </div>

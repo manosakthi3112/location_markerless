@@ -5,13 +5,16 @@ let destinationObject = null;
 let pathLine = null;
 let pathArrows = [];
 let maxArrows = 15;
-let arrowSpacing = 5.0; // meters
+let arrowSpacing = 2.0; // meters (denser)
 let hasStarted = false;
 
 // Routing API Globals
 let routeCoordinates = []; // GeoJSON [lon, lat] array from OSRM
 let routeCurve = null;     // THREE.CatmullRomCurve3
 let routeLength = 0;       // Length of the spline curve
+
+// Constants for Progressive Rendering
+const VISIBLE_PATH_AHEAD = 10; // Only show exactly 10 meters of track line and arrows ahead
 
 // 1 degree of latitude is ~111km. So 111,000 meters
 const M_PER_DEG_LAT = 111320;
@@ -106,28 +109,60 @@ function updateRoute3D() {
 
     const points = [];
 
+    // We only want to draw the line up to a max of 10 meters away from the user's current camera position
+    // First, find the exact path points and calculate distance accumulating along the way.
+
+    let accumulatedDistance = 0;
+    let prevPoint = new THREE.Vector3(0, -2.5, 0); // User is at 0,0,0
+    points.push(prevPoint);
+
     if (routeCoordinates.length > 0) {
-        // Convert all geo-coordinates to local 3D points relative to user camera (0,0,0)
         for (let coord of routeCoordinates) {
             const cLon = coord[0];
             const cLat = coord[1];
             const dx = (cLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
-            const dz = (userLat - cLat) * 111320; // +z is South in webgl
-            points.push(new THREE.Vector3(dx, -2.5, dz)); // Place on ground
+            const dz = (userLat - cLat) * 111320;
+
+            const nextPoint = new THREE.Vector3(dx, -2.5, dz);
+
+            // Calculate distance to this next segment
+            const segDist = prevPoint.distanceTo(nextPoint);
+            accumulatedDistance += segDist;
+
+            // Stop building the track line if we've passed 10 meters
+            if (accumulatedDistance > VISIBLE_PATH_AHEAD) {
+                // If we overshoot, cut the line back to exactly 10 meters
+                const overshoot = accumulatedDistance - VISIBLE_PATH_AHEAD;
+                const exactLengthNeeded = segDist - overshoot;
+                const dir = nextPoint.clone().sub(prevPoint).normalize();
+                const exactPoint = prevPoint.clone().add(dir.multiplyScalar(exactLengthNeeded));
+                points.push(exactPoint);
+                break;
+            } else {
+                points.push(nextPoint);
+                prevPoint = nextPoint;
+            }
         }
     } else {
-        // Fallback: Straight line to target
+        // Fallback: Straight line
         const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
         const dz = (userLat - targetLat) * 111320;
-        points.push(new THREE.Vector3(0, -2.5, 0));
-        points.push(new THREE.Vector3(dx, -2.5, dz));
+        let nextPoint = new THREE.Vector3(dx, -2.5, dz);
+
+        const dist = prevPoint.distanceTo(nextPoint);
+        if (dist > VISIBLE_PATH_AHEAD) {
+            // Cut it at exactly 10m
+            const dir = nextPoint.clone().sub(prevPoint).normalize();
+            nextPoint = prevPoint.clone().add(dir.multiplyScalar(VISIBLE_PATH_AHEAD));
+        }
+        points.push(nextPoint);
     }
 
     // Update Path Line Geometry
     if (!pathLine) {
         const lineMaterial = new THREE.LineBasicMaterial({
             color: 0x00ff00,
-            linewidth: 5,
+            linewidth: 8, // thicker line visually
         });
         const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
         pathLine = new THREE.Line(lineGeom, lineMaterial);
@@ -137,15 +172,19 @@ function updateRoute3D() {
         pathLine.computeLineDistances();
     }
 
-    // Create Spline Curve for arrows to follow
+    // Create Spline Curve for arrows to follow (we build curve from ONLY the limited points)
     if (points.length >= 2) {
-        // We use CatmullRomCurve3 to get a smooth path and easily calculate tangent angles
         routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
         routeLength = routeCurve.getLength();
+    } else {
+        routeCurve = null;
+        routeLength = 0;
     }
 
-    // Update Destination Object (Marker) at the very last point
-    const lastPoint = points[points.length - 1];
+    // Keep destination Object at the absolute final coordinates, NOT the 10m marker
+    const finalDx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
+    const finalDz = (userLat - targetLat) * 111320;
+
     if (!destinationObject) {
         const geom = new THREE.CylinderGeometry(0, 1, 4, 16);
         const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
@@ -159,7 +198,7 @@ function updateRoute3D() {
         ring.position.y = -2;
         destinationObject.add(ring);
     }
-    destinationObject.position.set(lastPoint.x, 0, lastPoint.z);
+    destinationObject.position.set(finalDx, 0, finalDz);
 }
 
 function animate() {
@@ -171,37 +210,33 @@ function animate() {
 
     // No need to animate dash offset anymore since line is solid
 
-    // Animate Arrows along the Spline Curve
+    // Animate Arrows along the Spline Curve (which is strictly max 10m long now)
     if (routeCurve && routeLength > 0.1) {
-        const speed = 2.5; // units per second
+        const speed = 2.0; // units per second
         const time = Date.now() * 0.001;
 
         for (let i = 0; i < maxArrows; i++) {
             let rawDist = (time * speed + i * arrowSpacing);
-            // Cycle arrows within a max visual distance (e.g. 50 meters)
-            let maxViewWalk = Math.min(routeLength, 50);
+            // Cycle arrows ONLY within the visible track length
+            let maxViewWalk = routeLength;
             let distAlong = rawDist % maxViewWalk;
 
-            // Parametric 't' value [0, 1] along the full curve
-            let t = distAlong / routeLength;
+            let t = distAlong / maxViewWalk;
             if (t > 1) t = 1;
 
             if (distAlong > 0.5) { // offset from feet
                 pathArrows[i].visible = true;
 
-                // 1) Get exact point on the curved road
                 const pt = routeCurve.getPointAt(t);
-                pathArrows[i].position.set(pt.x, -2.5, pt.z); // strictly on ground down deep
+                pathArrows[i].position.set(pt.x, -2.5, pt.z);
 
-                // 2) Get exact tangent (direction) of the road at that point
                 const tangent = routeCurve.getTangentAt(t).normalize();
                 const angle = Math.atan2(tangent.x, tangent.z);
                 pathArrows[i].rotation.y = angle;
 
-                // 3) Fading math
                 let opacity = 0.9;
-                if (distAlong < 3) opacity = (distAlong / 3) * 0.9;
-                if (maxViewWalk - distAlong < 5) opacity = ((maxViewWalk - distAlong) / 5) * 0.9;
+                if (distAlong < 2) opacity = (distAlong / 2) * 0.9;
+                if (maxViewWalk - distAlong < 2) opacity = ((maxViewWalk - distAlong) / 2) * 0.9; // fade early
 
                 pathArrows[i].children.forEach(c => {
                     if (c.material) c.material.opacity = Math.max(0, opacity);
@@ -209,6 +244,11 @@ function animate() {
             } else {
                 pathArrows[i].visible = false;
             }
+        }
+    } else {
+        // Hide arrows if no route
+        for (let i = 0; i < maxArrows; i++) {
+            pathArrows[i].visible = false;
         }
     }
 
@@ -353,14 +393,66 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// ================= MENU LOGIC =================
+
+const MENU_DATA = {
+    'Classrooms': [
+        { name: 'Room 101', lat: 10.6415, lon: 77.0295 },
+        { name: 'Room 102', lat: 10.6416, lon: 77.0296 }
+    ],
+    'Labs': [
+        { name: 'Physics Lab', lat: 10.6418, lon: 77.0298 },
+        { name: 'Computer Lab', lat: 10.6419, lon: 77.0299 }
+    ],
+    'Offices': [
+        { name: 'Admin Block', lat: 10.6420, lon: 77.0300 },
+        { name: 'Dean Office', lat: 10.6421, lon: 77.0301 }
+    ],
+    'Cafeteria': [
+        { name: 'Main Canteen', lat: 10.6425, lon: 77.0305 }
+    ],
+    'Restrooms': [
+        { name: 'Restroom A', lat: 10.6412, lon: 77.0292 }
+    ]
+};
+
+function showCategories() {
+    document.getElementById("categories-view").style.display = "block";
+    document.getElementById("locations-view").style.display = "none";
+}
+
+function showLocations(category) {
+    document.getElementById("categories-view").style.display = "none";
+    document.getElementById("locations-view").style.display = "block";
+    document.getElementById("category-title").innerText = category;
+
+    const list = document.getElementById("locations-list");
+    list.innerHTML = ""; // Clear existing
+
+    if (MENU_DATA[category]) {
+        MENU_DATA[category].forEach(loc => {
+            const btn = document.createElement("button");
+            btn.className = "menu-btn";
+            btn.innerText = loc.name;
+            btn.onclick = () => startAR(loc.name, loc.lat, loc.lon);
+            list.appendChild(btn);
+        });
+    }
+}
+
 // System Entry point for interactions
-function startAR() {
-    document.getElementById("start-overlay").style.display = "none";
+function startAR(destinationName, lat, lon) {
+    document.getElementById("menu-overlay").style.display = "none";
     document.getElementById("ui-overlay").style.display = "block";
+    document.getElementById("ar-destination-title").innerText = destinationName;
     hasStarted = true;
 
     // Start 3D
     init3D();
+
+    // Set target first
+    targetLat = lat;
+    targetLon = lon;
 
     // Request permission for iOS 13+ device orientation
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -379,6 +471,35 @@ function startAR() {
         getLocation();
         startCamera();
     }
+}
+
+function stopAR() {
+    hasStarted = false;
+    document.getElementById("menu-overlay").style.display = "flex";
+    document.getElementById("ui-overlay").style.display = "none";
+    document.getElementById("instruction").innerText = "Waiting for GPS...";
+
+    // Stop camera
+    const video = document.getElementById('camera-feed');
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+    }
+
+    // Clean up 3D Scene to save RAM
+    if (renderer) {
+        document.getElementById("container").innerHTML = "";
+    }
+    scene = null;
+    camera = null;
+    renderer = null;
+    controls = null;
+    pathLine = null;
+    destinationObject = null;
+    pathArrows = [];
+    routeCoordinates = [];
+
+    showCategories();
 }
 
 function startCamera() {
