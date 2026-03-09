@@ -423,27 +423,27 @@ const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
 
 function createRoadArrow() {
-    // Street View Chevron Shape (more reasonably sized)
+    // CCW Street View Chevron Shape (properly triangulated)
     const shape = new THREE.Shape();
     shape.moveTo(0, 1.5);
-    shape.lineTo(1.5, -0.5);
-    shape.lineTo(1.0, -0.9);
-    shape.lineTo(0, 0.5);
-    shape.lineTo(-1.0, -0.9);
     shape.lineTo(-1.5, -0.5);
+    shape.lineTo(-1.0, -0.9);
+    shape.lineTo(0, 0.5);
+    shape.lineTo(1.0, -0.9);
+    shape.lineTo(1.5, -0.5);
     shape.lineTo(0, 1.5);
 
     const geometry = new THREE.ShapeGeometry(shape);
     // Bold white color like Google Street View
     const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = Math.PI / 2;
+    mesh.rotation.x = -Math.PI / 2; // Flat and facing -Z direction
     mesh.position.y = 0.05; // elevate slightly above shadow
 
     // Deeper Drop shadow chevron
     const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
-    shadowMesh.rotation.x = Math.PI / 2;
+    shadowMesh.rotation.x = -Math.PI / 2;
     shadowMesh.scale.set(1.15, 1.15, 1.15);
     shadowMesh.position.set(0, 0.01, -0.2);
 
@@ -452,7 +452,7 @@ function createRoadArrow() {
     group.add(shadowMesh);
 
     // Scale moderately so perspective works better over distance
-    group.scale.set(0.7, 0.7, 0.7);
+    group.scale.set(0.5, 0.5, 0.5); // Slightly smaller for better screen fit
 
     return group;
 }
@@ -1089,7 +1089,11 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// ================= MENU LOGIC =================
+// =========================================================================
+// ✏️ EDIT MENU_DATA BELOW TO CHANGE BUTTON LOCATIONS
+// Insert your correct latitude (lat) and longitude (lon) for each room.
+// You can add more categories or buttons by following the exact same pattern!
+// =========================================================================
 
 const MENU_DATA = {
     'Classrooms': [
