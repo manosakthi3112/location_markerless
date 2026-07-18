@@ -389,3 +389,34 @@ body {
 .search-result-item:last-child {
     border-bottom: none;
 }
+
+/* Secure context warning banner */
+.warning-banner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    background: #ff4757;
+    color: white;
+    padding: 12px 40px 12px 20px;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 2000;
+    box-sizing: border-box;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.close-warning-btn {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+}

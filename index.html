@@ -18,6 +18,10 @@
 </head>
 
 <body>
+    <div id="secure-context-warning" class="warning-banner">
+        <span>⚠️ Insecure Connection (HTTP). Geolocation, camera, and compass sensors will be blocked on mobile. Please use HTTPS.</span>
+        <button class="close-warning-btn" onclick="this.parentElement.style.display='none'">&times;</button>
+    </div>
     <video id="camera-feed" autoplay playsinline></video>
 
     <!-- Destination Picker (full-screen map) -->

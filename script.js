@@ -580,10 +580,22 @@ function getLocation() {
             },
             error => {
                 console.error("Error getting location: ", error);
-                document.getElementById("instruction").innerText = "Location Error!";
+                let msg = "Location Error!";
+                if (error.code === error.PERMISSION_DENIED) {
+                    msg = "GPS Permission Denied! Enable location services.";
+                    alert("GPS permission was denied. Please enable location services in your browser/device settings.");
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    msg = "GPS Signal Unavailable!";
+                } else if (error.code === error.TIMEOUT) {
+                    msg = "GPS Request Timed Out!";
+                }
+                document.getElementById("instruction").innerText = msg;
             },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
         );
+    } else {
+        document.getElementById("instruction").innerText = "GPS not supported on this device/connection";
+        alert("GPS geolocation is not supported or is blocked. If on mobile, please make sure you are using a secure HTTPS connection.");
     }
 }
 
@@ -748,6 +760,32 @@ function handleSearch() {
 function startAR() {
     if (_selectedLat === null || _selectedLon === null) return;
 
+    // 1. Immediately request motion/orientation permission on iOS if required
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        document.getElementById("instruction").innerText = "Requesting compass permission...";
+        
+        DeviceOrientationEvent.requestPermission()
+            .then(response => {
+                if (response === 'granted') {
+                    proceedWithAR(true);
+                } else {
+                    console.warn("Orientation permission denied.");
+                    alert("Orientation permission denied. Compass orientation may not work.");
+                    proceedWithAR(false);
+                }
+            })
+            .catch(err => {
+                console.error("Device orientation request failed:", err);
+                alert("Could not request orientation permission. Please ensure you are using a secure connection (HTTPS).");
+                proceedWithAR(false);
+            });
+    } else {
+        // Non-iOS device or older browser
+        proceedWithAR(true);
+    }
+}
+
+function proceedWithAR(orientationGranted) {
     document.getElementById("destination-picker").style.display = "none";
     document.getElementById("ui-overlay").style.display = "block";
     document.getElementById("ar-destination-title").innerText =
@@ -758,7 +796,7 @@ function startAR() {
     targetLat = _selectedLat;
     targetLon = _selectedLon;
 
-    // Start camera + GPS immediately (must be synchronous user gesture on iOS)
+    // Start camera + GPS immediately
     startCamera();
     getLocation();
 
@@ -766,14 +804,9 @@ function startAR() {
     init3D();
     initMap();
 
-    // Start gyroscope + compass for accurate heading
-    startCompass();
-
-    // Request DeviceOrientation separately (non-blocking — nice-to-have for arrow direction)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
-            .then(perm => { if (perm !== 'granted') console.warn("Orientation not granted"); })
-            .catch(console.error);
+    // Start gyroscope + compass for accurate heading if permission granted
+    if (orientationGranted) {
+        startCompass();
     }
 }
 
@@ -878,5 +911,13 @@ function toggleLike() {
 // Initialize the destination picker on page load
 document.addEventListener('DOMContentLoaded', function () {
     initDestinationPicker();
+    
+    // Check if running in insecure context
+    if (!window.isSecureContext) {
+        const warningBanner = document.getElementById("secure-context-warning");
+        if (warningBanner) {
+            warningBanner.style.display = "block";
+        }
+    }
 });
 
