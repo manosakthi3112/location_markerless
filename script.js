@@ -40,6 +40,12 @@ const VISIBLE_PATH_AHEAD = 30; // Show exactly 30 meters of track line ahead so 
 const M_PER_DEG_LAT = 111320;
 let initialLat = null, initialLon = null;
 
+// Compass / Gyroscope state
+let compassHeading = null;
+let compassAccuracy = null;
+let absoluteOrientationSensor = null;
+let deviceOrientationListener = null;
+
 function createRoadArrow() {
     // CCW Street View Chevron Shape (properly triangulated)
     const shape = new THREE.Shape();
@@ -81,7 +87,7 @@ function init3D() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
     // Add DeviceOrientationControls
-    controls = new THREE.DeviceOrientationControls(camera, true);
+    controls = new THREE.DeviceOrientationControls(camera);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -359,49 +365,86 @@ function updateInstructions() {
         }
     }
 
-    // Calculate angle difference between camera viewing direction and CURRENT path direction
-    const cameraDirection = new THREE.Vector3();
-    camera.getWorldDirection(cameraDirection);
-    cameraDirection.y = 0; // project to XZ plane
-    cameraDirection.normalize();
-
-    let targetDirection = new THREE.Vector3();
-
-    // If we have a smooth curved route, measure the angle to the immediate chunk of road ahead (e.g. 5 meters)
-    if (routeCurve && routeLength > 5) {
-        let lookAheadDistance = 5;
-        let t = lookAheadDistance / routeLength;
-        if (t > 1) t = 1;
-
-        const pathPoint = routeCurve.getPointAt(t);
-        targetDirection.set(pathPoint.x, 0, pathPoint.z).normalize();
-    } else if (destinationObject) {
-        // Fallback to absolute destination if route hasn't loaded 
-        targetDirection.set(destinationObject.position.x, 0, destinationObject.position.z).normalize();
+    // Update compass display
+    const compassEl = document.getElementById("compass-info");
+    if (compassEl) {
+        if (compassHeading !== null) {
+            compassEl.innerText = `🧭 ${compassHeading.toFixed(0)}°`;
+        } else {
+            compassEl.innerText = "🧭 ---";
+        }
     }
 
-    // Cross product to get left/right, dot product for forward/backward
-    const cross = new THREE.Vector3().crossVectors(cameraDirection, targetDirection);
-    const dot = cameraDirection.dot(targetDirection);
-    const angle = Math.atan2(cross.y, dot) * (180 / Math.PI); // degrees
-
     const navIcon = document.getElementById("nav-arrow");
-
     let instruction = "Orienting...";
     let arrowIcon = "🔄";
 
-    if (dot > 0.9) {
-        instruction = "Head Straight";
-        arrowIcon = "↑";
-    } else if (angle > 15) {
-        instruction = "Turn Left";
-        arrowIcon = "←";
-    } else if (angle < -15) {
-        instruction = "Turn Right";
-        arrowIcon = "→";
-    } else if (dot < 0) {
-        instruction = "Turn Around";
-        arrowIcon = "↓";
+    // ===== PRIMARY: Gyroscope + compass heading (more accurate) =====
+    if (compassHeading !== null) {
+        let targetBearing;
+        if (routeCurve && routeLength > 0.5) {
+            // Use tangent of the route curve right ahead for road direction
+            const lookAhead = Math.min(3 / routeLength, 0.5);
+            const tangent = routeCurve.getTangentAt(lookAhead).normalize();
+            // tangent.x = east, tangent.z = south (in scene coords)
+            targetBearing = (toDegrees(Math.atan2(tangent.x, -tangent.z)) + 360) % 360;
+        } else {
+            // Straight bearing to destination
+            targetBearing = bearing(userLat, userLon, targetLat, targetLon);
+        }
+
+        let diff = ((targetBearing - compassHeading) + 540) % 360 - 180;
+
+        if (Math.abs(diff) < 15) {
+            instruction = "Head Straight";
+            arrowIcon = "↑";
+        } else if (diff > 15 && diff < 165) {
+            instruction = "Turn Right";
+            arrowIcon = "→";
+        } else if (diff < -15 && diff > -165) {
+            instruction = "Turn Left";
+            arrowIcon = "←";
+        } else if (Math.abs(diff) >= 165) {
+            instruction = "Turn Around";
+            arrowIcon = "↓";
+        }
+    } else {
+        // ===== FALLBACK: Three.js camera direction (no compass available) =====
+        const cameraDirection = new THREE.Vector3();
+        camera.getWorldDirection(cameraDirection);
+        cameraDirection.y = 0;
+        cameraDirection.normalize();
+
+        let targetDirection = new THREE.Vector3();
+
+        if (routeCurve && routeLength > 5) {
+            let lookAheadDistance = 5;
+            let t = lookAheadDistance / routeLength;
+            if (t > 1) t = 1;
+
+            const pathPoint = routeCurve.getPointAt(t);
+            targetDirection.set(pathPoint.x, 0, pathPoint.z).normalize();
+        } else if (destinationObject) {
+            targetDirection.set(destinationObject.position.x, 0, destinationObject.position.z).normalize();
+        }
+
+        const cross = new THREE.Vector3().crossVectors(cameraDirection, targetDirection);
+        const dot = cameraDirection.dot(targetDirection);
+        const angle = Math.atan2(cross.y, dot) * (180 / Math.PI);
+
+        if (dot > 0.9) {
+            instruction = "Head Straight";
+            arrowIcon = "↑";
+        } else if (angle > 15) {
+            instruction = "Turn Left";
+            arrowIcon = "←";
+        } else if (angle < -15) {
+            instruction = "Turn Right";
+            arrowIcon = "→";
+        } else if (dot < 0) {
+            instruction = "Turn Around";
+            arrowIcon = "↓";
+        }
     }
 
     document.getElementById("instruction").innerText = instruction;
@@ -569,6 +612,62 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// Compute bearing (0-360, 0 = North, clockwise) from point A to point B
+function bearing(lat1, lon1, lat2, lon2) {
+    const dLon = toRadians(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRadians(lat2));
+    const x = Math.cos(toRadians(lat1)) * Math.sin(toRadians(lat2)) -
+              Math.sin(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.cos(dLon);
+    return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function startCompass() {
+    deviceOrientationListener = function (event) {
+        let heading = null;
+        if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+            heading = event.webkitCompassHeading;
+            compassAccuracy = event.webkitCompassAccuracy !== null ? event.webkitCompassAccuracy : null;
+        } else if (event.alpha !== null) {
+            heading = event.alpha;
+        }
+        if (heading !== null) {
+            compassHeading = heading;
+        }
+    };
+    window.addEventListener('deviceorientation', deviceOrientationListener, true);
+
+    // AbsoluteOrientationSensor (newer API on Android Chrome) — most accurate
+    if (typeof AbsoluteOrientationSensor !== 'undefined') {
+        try {
+            absoluteOrientationSensor = new AbsoluteOrientationSensor({ frequency: 60 });
+            absoluteOrientationSensor.addEventListener('reading', () => {
+                const q = absoluteOrientationSensor.quaternion;
+                const heading = Math.atan2(
+                    2 * (q[0] * q[3] + q[1] * q[2]),
+                    1 - 2 * (q[2] * q[2] + q[3] * q[3])
+                ) * (180 / Math.PI);
+                compassHeading = (heading + 360) % 360;
+            });
+            absoluteOrientationSensor.start();
+        } catch (e) {
+            console.warn("AbsoluteOrientationSensor not available:", e);
+        }
+    }
+}
+
+function stopCompass() {
+    if (deviceOrientationListener) {
+        window.removeEventListener('deviceorientation', deviceOrientationListener, true);
+        deviceOrientationListener = null;
+    }
+    if (absoluteOrientationSensor) {
+        absoluteOrientationSensor.stop();
+        absoluteOrientationSensor = null;
+    }
+    compassHeading = null;
+    compassAccuracy = null;
+}
+
 // =========================================================================
 // DESTINATION PICKER — full-screen map with click-to-set + Nominatim search
 // =========================================================================
@@ -655,6 +754,10 @@ function startAR() {
         `${_selectedLat.toFixed(6)}, ${_selectedLon.toFixed(6)}`;
     hasStarted = true;
 
+    // Set target FIRST so GPS callback triggers route calculation immediately
+    targetLat = _selectedLat;
+    targetLon = _selectedLon;
+
     // Start camera + GPS immediately (must be synchronous user gesture on iOS)
     startCamera();
     getLocation();
@@ -663,8 +766,8 @@ function startAR() {
     init3D();
     initMap();
 
-    targetLat = _selectedLat;
-    targetLon = _selectedLon;
+    // Start gyroscope + compass for accurate heading
+    startCompass();
 
     // Request DeviceOrientation separately (non-blocking — nice-to-have for arrow direction)
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -689,6 +792,7 @@ function stopAR() {
     if (renderer) {
         document.getElementById("container").innerHTML = "";
     }
+    stopCompass();
     scene = null;
     camera = null;
     renderer = null;

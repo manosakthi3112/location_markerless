@@ -93,6 +93,17 @@ body {
     margin-top: 10px;
 }
 
+#compass-info {
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 14px;
+    margin-top: 6px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
 /* BOTTOM SHEET GOOGLE MAPS STYLE */
 #bottom-sheet {
     background: white;
