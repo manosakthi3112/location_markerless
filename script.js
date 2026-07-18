@@ -585,7 +585,7 @@ function initDestinationPicker() {
         attributionControl: true
     }).setView([10.678645, 77.032418], 18);
 
-    L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+    L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
         maxZoom: 22,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
     }).addTo(pickerMap);
@@ -655,26 +655,22 @@ function startAR() {
         `${_selectedLat.toFixed(6)}, ${_selectedLon.toFixed(6)}`;
     hasStarted = true;
 
+    // Start camera + GPS immediately (must be synchronous user gesture on iOS)
+    startCamera();
+    getLocation();
+
+    // Init 3D scene and minimap
     init3D();
     initMap();
 
     targetLat = _selectedLat;
     targetLon = _selectedLon;
 
+    // Request DeviceOrientation separately (non-blocking — nice-to-have for arrow direction)
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
-            .then(permissionState => {
-                if (permissionState === 'granted') {
-                    getLocation();
-                    startCamera();
-                } else {
-                    alert("Orientation access denied. Cannot use AR.");
-                }
-            })
+            .then(perm => { if (perm !== 'granted') console.warn("Orientation not granted"); })
             .catch(console.error);
-    } else {
-        getLocation();
-        startCamera();
     }
 }
 
@@ -725,7 +721,7 @@ function initMap() {
     }).setView([10.641123, 77.029058], 15); // Default campus center
 
     // Google Maps Tile Layer
-    L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+    L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         maxZoom: 20,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
     }).addTo(leafletMap);
@@ -751,11 +747,16 @@ function toggleMap() {
 
 function startCamera() {
     const video = document.getElementById('camera-feed');
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { console.error("Camera access denied.", err); });
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById("instruction").innerText = "Camera not supported on this device";
+        return;
     }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => { video.srcObject = stream; })
+        .catch(err => {
+            console.error("Camera access denied.", err);
+            document.getElementById("instruction").innerText = "Camera permission denied — navigation continues without AR view";
+        });
 }
 
 // Like functionality
