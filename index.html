@@ -18,32 +18,19 @@
 <body>
     <video id="camera-feed" autoplay playsinline></video>
 
-    <!-- Main Menu Overlay -->
-    <div id="menu-overlay" class="overlay-container">
-        <!-- Categories View -->
-        <div id="categories-view">
-            <!-- Smart Search bar -->
-            <div id="search-container">
-                <input type="text" id="search-input" placeholder="🔍 Search destination..." oninput="handleSearch()">
-            </div>
-
-            <h2 id="main-view-title">Select Destination Category</h2>
-            <div id="main-menu-grid" class="menu-grid">
-                <button class="menu-btn" onclick="showLocations('Classrooms')">🏫 Classrooms</button>
-                <button class="menu-btn" onclick="showLocations('Labs')">🔬 Labs</button>
-                <button class="menu-btn" onclick="showLocations('Offices')">🏢 Offices</button>
-                <button class="menu-btn" onclick="showLocations('Cafeteria')">🍔 Cafeteria</button>
-                <button class="menu-btn" onclick="showLocations('Restrooms')">🚻 Restrooms</button>
-            </div>
+    <!-- Destination Picker (full-screen map) -->
+    <div id="destination-picker" class="picker-container">
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="🔍 Search or tap the map..." oninput="handleSearch()">
+            <div id="search-results"></div>
         </div>
-
-        <!-- Locations View (Hidden initially) -->
-        <div id="locations-view" style="display: none;">
-            <button class="back-btn" onclick="showCategories()">← Back</button>
-            <h2 id="category-title">Locations</h2>
-            <div id="locations-list" class="menu-list">
-                <!-- Dynamically populated buttons go here -->
-            </div>
+        <div id="picker-map"></div>
+        <div id="picker-bottom">
+            <p id="picker-instruction">📍 Tap on the map to set your destination</p>
+            <p id="selected-coords"></p>
+            <button id="start-nav-btn" class="primary-btn" style="display:none;" onclick="startAR()">
+                🚶 Start Navigation
+            </button>
         </div>
     </div>
 

@@ -103,141 +103,33 @@ function init3D() {
     animate();
 }
 
-/* ================= ADVANCED CUSTOM AR ROUTING (A* ALGORITHM) ================= */
-// Graph nodes loaded dynamically from admin tool JSON
-let CAMPUS_NODES = {};
-let CAMPUS_EDGES = {};
-let graphLoaded = false;
+/* ================= REAL-WORLD ROUTING VIA OSRM (OpenStreetMap) ================= */
+// Uses OSRM's free routing API to get road-following paths
 
-// Load graph data automatically from the generated JSON file
-async function loadGraphData() {
-    try {
-        const response = await fetch('campus_nodes.json');
-
-        if (!response.ok) {
-            console.warn("campus_nodes.json not found on server yet. Run the admin map tool and place it in the folder!");
-            return;
-        }
-
-        CAMPUS_NODES = await response.json();
-
-        // Auto-generate edges for points within 25 meters walking distance
-        CAMPUS_EDGES = {};
-        const MAX_CONNECT_DIST = 25;
-
-        for (let id1 in CAMPUS_NODES) {
-            CAMPUS_EDGES[id1] = [];
-            for (let id2 in CAMPUS_NODES) {
-                if (id1 !== id2) {
-                    let d = calculateDistance(CAMPUS_NODES[id1].lat, CAMPUS_NODES[id1].lon, CAMPUS_NODES[id2].lat, CAMPUS_NODES[id2].lon);
-                    if (d <= MAX_CONNECT_DIST) {
-                        CAMPUS_EDGES[id1].push(id2);
-                    }
-                }
-            }
-        }
-        graphLoaded = true;
-        console.log("Graph Generated! Nodes:", Object.keys(CAMPUS_NODES).length);
-    } catch (e) {
-        console.error("Invalid graph JSON", e);
-    }
-}
-
-function findNearestNode(lat, lon) {
-    if (!graphLoaded) return null;
-    let nearestID = null;
-    let minDist = Infinity;
-    for (const [id, node] of Object.entries(CAMPUS_NODES)) {
-        const d = calculateDistance(lat, lon, node.lat, node.lon);
-        if (d < minDist) {
-            minDist = d;
-            nearestID = id;
-        }
-    }
-    return nearestID;
-}
-
-function calculateCustomRoute() {
+async function calculateCustomRoute() {
     if (userLat === null || targetLat === null) return;
 
-    document.getElementById("instruction").innerText = "Calculating Custom AR Route...";
+    document.getElementById("instruction").innerText = "Fetching route from OSRM...";
 
-    // 1. Find nearest graph node to User and Target
-    const startId = findNearestNode(userLat, userLon);
-    const targetId = findNearestNode(targetLat, targetLon);
+    try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${userLon},${userLat};${targetLon},${targetLat}?geometries=geojson&overview=full`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-    if (!startId || !targetId) {
-        routeCoordinates = []; // Fallback to straight line
-        updateRoute3D();
-        return;
-    }
-
-    // 2. A* Pathfinding Algorithm
-    let openSet = [startId];
-    let cameFrom = {};
-    let gScore = {};
-    let fScore = {};
-
-    for (let node in CAMPUS_NODES) {
-        gScore[node] = Infinity;
-        fScore[node] = Infinity;
-    }
-
-    gScore[startId] = 0;
-    fScore[startId] = calculateDistance(CAMPUS_NODES[startId].lat, CAMPUS_NODES[startId].lon, CAMPUS_NODES[targetId].lat, CAMPUS_NODES[targetId].lon);
-
-    while (openSet.length > 0) {
-        // Get node with lowest fScore
-        let current = openSet[0];
-        let lowestF = fScore[current];
-        for (let i = 1; i < openSet.length; i++) {
-            if (fScore[openSet[i]] < lowestF) {
-                lowestF = fScore[openSet[i]];
-                current = openSet[i];
-            }
-        }
-
-        if (current === targetId) {
-            // Reconstruct path
-            let pathIds = [current];
-            while (cameFrom[current]) {
-                current = cameFrom[current];
-                pathIds.unshift(current);
-            }
-
-            // Build routeCoordinates array [lon, lat] for the 3D engine
-            routeCoordinates = pathIds.map(id => [CAMPUS_NODES[id].lon, CAMPUS_NODES[id].lat]);
-
-            // 3. To make it super accurate, push the exact final target coordinates at the very end
-            routeCoordinates.push([targetLon, targetLat]);
-
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+            routeCoordinates = data.routes[0].geometry.coordinates;
             updateRoute3D();
-            return;
+            updateLeafletRoute();
+        } else {
+            throw new Error('No route returned');
         }
-
-        openSet = openSet.filter(node => node !== current);
-
-        let neighbors = CAMPUS_EDGES[current] || [];
-        for (let neighbor of neighbors) {
-            const d = calculateDistance(CAMPUS_NODES[current].lat, CAMPUS_NODES[current].lon, CAMPUS_NODES[neighbor].lat, CAMPUS_NODES[neighbor].lon);
-            let tentative_gScore = gScore[current] + d;
-
-            if (tentative_gScore < gScore[neighbor]) {
-                cameFrom[neighbor] = current;
-                gScore[neighbor] = tentative_gScore;
-                fScore[neighbor] = gScore[neighbor] + calculateDistance(CAMPUS_NODES[neighbor].lat, CAMPUS_NODES[neighbor].lon, CAMPUS_NODES[targetId].lat, CAMPUS_NODES[targetId].lon);
-
-                if (!openSet.includes(neighbor)) {
-                    openSet.push(neighbor);
-                }
-            }
-        }
+    } catch (e) {
+        console.error("OSRM routing failed, using straight line fallback:", e);
+        document.getElementById("instruction").innerText = "Routing unavailable, using direct line";
+        routeCoordinates = [];
+        updateRoute3D();
+        updateLeafletRoute();
     }
-
-    // Path not found, fallback
-    routeCoordinates = [];
-    updateRoute3D();
-    updateLeafletRoute();
 }
 
 function updateLeafletRoute() {
@@ -678,130 +570,97 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 // =========================================================================
-// ✏️ EDIT MENU_DATA BELOW TO CHANGE BUTTON LOCATIONS
-// Insert your correct latitude (lat) and longitude (lon) for each room.
-// You can add more categories or buttons by following the exact same pattern!
+// DESTINATION PICKER — full-screen map with click-to-set + Nominatim search
 // =========================================================================
 
-const MENU_DATA = {
-    'Classrooms': [
-        { name: 'Room 101', lat: 10.6415, lon: 77.0295 },
-        { name: 'Room 102', lat: 10.6416, lon: 77.0296 }
-    ],
-    'Labs': [
-        { name: 'Physics Lab', lat: 10.6418, lon: 77.0298 },
-        { name: 'Computer Lab', lat: 10.6419, lon: 77.0299 }
-    ],
-    'Offices': [
-        { name: 'Admin Block', lat: 10.6420, lon: 77.0300 },
-        { name: 'Dean Office', lat: 10.6421, lon: 77.0301 }
-    ],
-    'Cafeteria': [
-        { name: 'Main Canteen', lat: 10.6425, lon: 77.0305 }
-    ],
-    'Restrooms': [
-        { name: 'Restroom A', lat: 10.6412, lon: 77.0292 }
-    ]
-};
+let pickerMap = null;
+let pickerMarker = null;
+let _selectedLat = null, _selectedLon = null;
 
+function initDestinationPicker() {
+    if (pickerMap) return;
+
+    pickerMap = L.map('picker-map', {
+        zoomControl: true,
+        attributionControl: true
+    }).setView([10.678645, 77.032418], 18);
+
+    L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+        maxZoom: 22,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    }).addTo(pickerMap);
+
+    pickerMap.on('click', function (e) {
+        setPickedDestination(e.latlng.lat, e.latlng.lng, null);
+    });
+}
+
+function setPickedDestination(lat, lng, label) {
+    _selectedLat = lat;
+    _selectedLon = lng;
+
+    if (pickerMarker) pickerMap.removeLayer(pickerMarker);
+    pickerMarker = L.marker([lat, lng]).addTo(pickerMap);
+
+    document.getElementById('selected-coords').innerText = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    document.getElementById('picker-instruction').innerText = label || '📍 Destination set — tap Start to navigate';
+    document.getElementById('start-nav-btn').style.display = 'block';
+}
+
+let searchTimeout = null;
 function handleSearch() {
-    const query = document.getElementById("search-input").value.toLowerCase();
-    const grid = document.getElementById("main-menu-grid");
-    const title = document.getElementById("main-view-title");
+    clearTimeout(searchTimeout);
+    const query = document.getElementById("search-input").value.trim();
+    const resultsEl = document.getElementById("search-results");
 
-    // Clear the grid
-    grid.innerHTML = "";
-
-    if (query.length === 0) {
-        // Restore category buttons
-        title.innerText = "Select Destination Category";
-        grid.style.display = "grid";
-        grid.className = "menu-grid";
-
-        Object.keys(MENU_DATA).forEach(category => {
-            const btn = document.createElement("button");
-            btn.className = "menu-btn";
-            let icon = "";
-            if (category === 'Classrooms') icon = "🏫 ";
-            if (category === 'Labs') icon = "🔬 ";
-            if (category === 'Offices') icon = "🏢 ";
-            if (category === 'Cafeteria') icon = "🍔 ";
-            if (category === 'Restrooms') icon = "🚻 ";
-            btn.innerText = icon + category;
-            btn.onclick = () => showLocations(category);
-            grid.appendChild(btn);
-        });
+    if (query.length < 3) {
+        resultsEl.style.display = "none";
         return;
     }
 
-    // Show Search Results
-    title.innerText = "Search Results";
-    grid.style.display = "flex";
-    grid.style.flexDirection = "column";
-    grid.className = "menu-list";
-
-    let foundAny = false;
-    for (const [category, locations] of Object.entries(MENU_DATA)) {
-        locations.forEach(loc => {
-            if (loc.name.toLowerCase().includes(query)) {
-                foundAny = true;
-                const btn = document.createElement("button");
-                btn.className = "menu-btn";
-                btn.innerText = loc.name;
-                btn.onclick = () => startAR(loc.name, loc.lat, loc.lon);
-                grid.appendChild(btn);
-            }
-        });
-    }
-
-    if (!foundAny) {
-        grid.innerHTML = "<p>No destinations found.</p>";
-    }
+    searchTimeout = setTimeout(() => {
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`)
+            .then(r => r.json())
+            .then(data => {
+                resultsEl.innerHTML = "";
+                if (!data || data.length === 0) {
+                    resultsEl.style.display = "none";
+                    return;
+                }
+                resultsEl.style.display = "block";
+                data.forEach(r => {
+                    const div = document.createElement("div");
+                    div.className = "search-result-item";
+                    div.innerText = r.display_name;
+                    div.onclick = () => {
+                        pickerMap.setView([parseFloat(r.lat), parseFloat(r.lon)], 19);
+                        setPickedDestination(parseFloat(r.lat), parseFloat(r.lon), r.display_name);
+                        resultsEl.style.display = "none";
+                        document.getElementById("search-input").value = "";
+                    };
+                    resultsEl.appendChild(div);
+                });
+            })
+            .catch(() => {});
+    }, 500);
 }
 
-function showCategories() {
-    document.getElementById("categories-view").style.display = "block";
-    document.getElementById("locations-view").style.display = "none";
-    handleSearch(); // resets view state to default or current search
-}
+// System Entry point — called by "Start Navigation" button
+function startAR() {
+    if (_selectedLat === null || _selectedLon === null) return;
 
-function showLocations(category) {
-    document.getElementById("categories-view").style.display = "none";
-    document.getElementById("locations-view").style.display = "block";
-    document.getElementById("category-title").innerText = category;
-
-    const list = document.getElementById("locations-list");
-    list.innerHTML = ""; // Clear existing
-
-    if (MENU_DATA[category]) {
-        MENU_DATA[category].forEach(loc => {
-            const btn = document.createElement("button");
-            btn.className = "menu-btn";
-            btn.innerText = loc.name;
-            btn.onclick = () => startAR(loc.name, loc.lat, loc.lon);
-            list.appendChild(btn);
-        });
-    }
-}
-
-// System Entry point for interactions
-function startAR(destinationName, lat, lon) {
-    document.getElementById("menu-overlay").style.display = "none";
+    document.getElementById("destination-picker").style.display = "none";
     document.getElementById("ui-overlay").style.display = "block";
-    document.getElementById("ar-destination-title").innerText = destinationName;
+    document.getElementById("ar-destination-title").innerText =
+        `${_selectedLat.toFixed(6)}, ${_selectedLon.toFixed(6)}`;
     hasStarted = true;
 
-    // Start 3D
     init3D();
-
-    // Start 2D Map
     initMap();
 
-    // Set target first
-    targetLat = lat;
-    targetLon = lon;
+    targetLat = _selectedLat;
+    targetLon = _selectedLon;
 
-    // Request permission for iOS 13+ device orientation
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
             .then(permissionState => {
@@ -814,7 +673,6 @@ function startAR(destinationName, lat, lon) {
             })
             .catch(console.error);
     } else {
-        // Non-iOS 13+ path
         getLocation();
         startCamera();
     }
@@ -822,18 +680,16 @@ function startAR(destinationName, lat, lon) {
 
 function stopAR() {
     hasStarted = false;
-    document.getElementById("menu-overlay").style.display = "flex";
+    document.getElementById("destination-picker").style.display = "flex";
     document.getElementById("ui-overlay").style.display = "none";
     document.getElementById("instruction").innerText = "Waiting for GPS...";
 
-    // Stop camera
     const video = document.getElementById('camera-feed');
     if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
         video.srcObject = null;
     }
 
-    // Clean up 3D Scene to save RAM
     if (renderer) {
         document.getElementById("container").innerHTML = "";
     }
@@ -846,7 +702,6 @@ function stopAR() {
     pathArrows = [];
     routeCoordinates = [];
 
-    // Clean up Leaflet Map
     if (leafletMap) {
         leafletMap.remove();
         leafletMap = null;
@@ -858,7 +713,7 @@ function stopAR() {
         document.getElementById("toggle-map-btn").innerText = "⛶ Expand";
     }
 
-    showCategories();
+    setTimeout(() => { if (pickerMap) pickerMap.invalidateSize(); }, 100);
 }
 
 function initMap() {
@@ -915,5 +770,8 @@ function toggleLike() {
     }
 }
 
-// Automatically load the graph data when the script starts
-loadGraphData();
+// Initialize the destination picker on page load
+document.addEventListener('DOMContentLoaded', function () {
+    initDestinationPicker();
+});
+
