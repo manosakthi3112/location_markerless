@@ -1,10 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Web Navigation</title>
+    <title>3D AR Live View Navigation</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+
+    <!-- Three.js and Device Controls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DeviceOrientationControls.js"></script>
 
@@ -22,64 +29,131 @@
         <span>⚠️ Insecure Connection (HTTP). Geolocation, camera, and compass sensors will be blocked on mobile. Please use HTTPS.</span>
         <button class="close-warning-btn" onclick="this.parentElement.style.display='none'">&times;</button>
     </div>
+
+    <!-- Live AR Camera Feed -->
     <video id="camera-feed" autoplay playsinline></video>
 
-    <!-- Destination Picker (full-screen map) -->
+    <!-- Destination Picker (Full-screen map view before navigation starts) -->
     <div id="destination-picker" class="picker-container">
         <div id="search-container">
-            <input type="text" id="search-input" placeholder="🔍 Search or tap the map..." oninput="handleSearch()">
+            <div class="search-bar-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" placeholder="Search destination or tap map..." oninput="handleSearch()" autocomplete="off">
+                <button class="search-clear-btn" id="search-clear" onclick="clearSearch()">&times;</button>
+            </div>
             <div id="search-results"></div>
+            
+            <div class="quick-category-tags">
+                <button class="cat-tag" onclick="quickSearch('Karpagam Academy')">🎓 Campus</button>
+                <button class="cat-tag" onclick="quickSearch('KAHE Gym')">🏋️ Gym</button>
+                <button class="cat-tag" onclick="quickSearch('Saravana Bhavan')">☕ Cafe</button>
+                <button class="cat-tag" onclick="quickSearch('Coimbatore')">🏙️ City</button>
+            </div>
         </div>
+
         <div id="picker-map"></div>
-        <div id="picker-bottom">
-            <p id="picker-instruction">📍 Tap on the map to set your destination</p>
-            <p id="selected-coords"></p>
-            <button id="start-nav-btn" class="primary-btn" style="display:none;" onclick="startAR()">
-                🚶 Start Navigation
-            </button>
+
+        <div id="picker-bottom" class="glass-card">
+            <div class="sheet-handle"></div>
+            <p id="picker-instruction">📍 Tap anywhere on the map to choose your destination</p>
+            <p id="selected-coords">Coordinates: --</p>
+            <div class="picker-action-group">
+                <button id="start-nav-btn" class="primary-nav-btn" style="display:none;" onclick="startAR()">
+                    <span class="btn-icon">🚶</span> Start Live AR Navigation
+                </button>
+            </div>
         </div>
     </div>
 
+    <!-- Active Navigation Overlay (AR HUD) -->
     <div id="ui-overlay" style="display: none;">
-        <!-- Top Navigation Header -->
-        <div id="top-nav-panel">
-            <div class="nav-icon-container">
-                <span id="nav-arrow">↑</span>
+        <!-- Top Turn-by-Turn Instruction Header Card -->
+        <div id="top-nav-panel" class="glass-panel">
+            <div class="nav-icon-container" id="nav-icon-box">
+                <span id="nav-arrow" class="maneuver-arrow">↑</span>
             </div>
             <div class="nav-text-container">
-                <h3 id="instruction">Waiting for GPS...</h3>
-                <p id="distance">--</p>
+                <div class="instruction-main">
+                    <h3 id="instruction">Calculating route...</h3>
+                    <span id="step-distance-badge" class="step-badge">In 0 m</span>
+                </div>
+                <p id="street-name" class="street-subtext">Calculating route...</p>
+                <div id="sub-nav-bar">
+                    <span id="distance">Distance: --</span>
+                    <span class="dot-divider">•</span>
+                    <span id="eta-time">ETA: --</span>
+                    <span class="dot-divider">•</span>
+                    <span id="gps-badge" class="status-pill green">GPS Acc: 0m</span>
+                </div>
             </div>
         </div>
 
-        <!-- Middle Tools -->
+        <!-- Floating Action Tools (Right Column) -->
         <div id="middle-tools">
-            <button id="like-btn" onclick="toggleLike()">❤️ Like</button>
-            <p id="current-coords"></p>
-            <p id="compass-info">🧭 ---</p>
-        </div>
+            <button id="voice-btn" class="glass-tool-btn" onclick="toggleVoice()" title="Toggle Voice Guidance">
+                🔊 <span class="tool-label">Voice ON</span>
+            </button>
 
-        <!-- Bottom Sheet -->
-        <div id="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <h2 id="ar-destination-title" class="destination-title">Target Destination</h2>
-            <p class="destination-subtitle">Markerless Navigation</p>
-            <button class="menu-btn" style="background: #ff4757; margin-top: 10px;" onclick="stopAR()">
-                End Navigation
+            <button id="compass-btn" class="glass-tool-btn" onclick="toggleCompassModal()" title="Compass Alignment">
+                🧭 <span class="tool-label" id="compass-info">0°</span>
+            </button>
+
+            <button id="map-style-btn" class="glass-tool-btn" onclick="toggleMapStyle()" title="Map Style">
+                🗺️ <span class="tool-label">Street</span>
+            </button>
+
+            <button id="sim-btn" class="glass-tool-btn demo-btn" onclick="toggleSimulation()" title="Test Walk Simulation">
+                ▶ <span class="tool-label">Demo Walk</span>
+            </button>
+
+            <button id="like-btn" class="glass-tool-btn" onclick="toggleLike()" title="Save Route">
+                ❤️ <span class="tool-label">Like</span>
             </button>
         </div>
 
-        <!-- Minimap Container -->
-        <div id="minimap-container">
+        <!-- Compass Manual Calibration Modal -->
+        <div id="compass-modal" class="glass-modal" style="display: none;">
+            <div class="modal-header">
+                <h4>🧭 Compass Calibration</h4>
+                <button class="close-modal-btn" onclick="toggleCompassModal()">&times;</button>
+            </div>
+            <p class="modal-desc">If 3D arrows are pointing slightly off, adjust compass offset below:</p>
+            <div class="compass-nudge-group">
+                <button class="nudge-btn" onclick="nudgeCompass(-5)">-5°</button>
+                <span id="compass-offset-label">Offset: 0°</span>
+                <button class="nudge-btn" onclick="nudgeCompass(+5)">+5°</button>
+            </div>
+            <button class="modal-action-btn" onclick="resetCompassOffset()">Reset Alignment</button>
+        </div>
+
+        <!-- Bottom Sheet Banner -->
+        <div id="bottom-sheet" class="glass-card">
+            <div class="sheet-handle"></div>
+            <div class="sheet-content-row">
+                <div class="destination-info">
+                    <h2 id="ar-destination-title" class="destination-title">Target Destination</h2>
+                    <p id="ar-destination-subtitle" class="destination-subtitle">Markerless AR Live Navigation</p>
+                </div>
+                <button class="end-nav-btn" onclick="stopAR()">
+                    ❌ End Navigation
+                </button>
+            </div>
+        </div>
+
+        <!-- Collapsible Interactive Minimap Container -->
+        <div id="minimap-container" class="glass-map-container">
             <div id="map"></div>
-            <button id="toggle-map-btn" onclick="toggleMap()">⛶ Expand</button>
+            <div class="map-controls-bar">
+                <button id="toggle-map-btn" class="map-btn" onclick="toggleMap()">⛶ Expand Map</button>
+                <button id="recenter-map-btn" class="map-btn" onclick="recenterMap()">🎯 Center</button>
+            </div>
         </div>
     </div>
 
+    <!-- 3D Three.js WebGL Container -->
     <div id="container"></div>
 
     <script src="script.js"></script>
-
 </body>
 
 </html>
