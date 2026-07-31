@@ -1,5 +1,5 @@
 // =========================================================================
-// 3D WEB AR NAVIGATION SYSTEM (GOOGLE LIVE VIEW STYLE)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -9,10 +9,9 @@ let targetLat = null, targetLon = null;
 let destinationObject = null;
 let pathRibbonMesh = null;
 let pathArrows = [];
-let maxArrows = 15;
-let arrowSpacing = 2.5; // meters
+let maxArrows = 18;
+let arrowSpacing = 2.2; // meters
 let hasStarted = false;
-let maneuverMarkers3D = [];
 
 // --- GPS Kalman Filter & Accuracy State ---
 let kf = {
@@ -21,6 +20,7 @@ let kf = {
     covLat: NaN, covLon: NaN
 };
 let rawGpsAccuracy = 10;
+let accuracyCircleMarker = null;
 
 // --- Leaflet Minimap Globals ---
 let leafletMap = null;
@@ -28,8 +28,9 @@ let userMarker = null;
 let userFovCone = null;
 let targetMarker = null;
 let mapRouteLine = null;
-let stepMapMarkers = [];
+let maneuverMapMarkers = [];
 let isMapExpanded = false;
+let isHeadingUp = true; // Google Maps default: Map rotates with heading
 let currentTileLayer = null;
 let mapTileStyle = 'street'; // 'street', 'satellite', 'dark'
 
@@ -41,7 +42,7 @@ let routeCurve = null;     // THREE.CatmullRomCurve3
 let routeLength = 0;       // Length of visible track
 let totalRouteDistance = 0; // Total distance in meters
 let totalRouteDuration = 0; // Total duration in seconds
-const VISIBLE_PATH_AHEAD = 45; // Meters of visible path rendered in AR view
+const VISIBLE_PATH_AHEAD = 50; // Meters of visible path rendered in AR view
 
 // --- Voice & Settings State ---
 let voiceEnabled = true;
@@ -60,24 +61,24 @@ let absoluteOrientationSensor = null;
 let deviceOrientationListener = null;
 
 // =========================================================================
-// 1. MANEUVER UTILITIES & ICON MAPPING
+// 1. GOOGLE MAPS MANEUVER UTILITIES & ICON MAPPING
 // =========================================================================
 
 function getManeuverIcon(type, modifier) {
     if (type === 'arrive') return { icon: '🏁', label: 'Arrive at Destination' };
-    if (type === 'depart') return { icon: '🚀', label: 'Start Route' };
-    if (type === 'roundabout' || type === 'rotary') return { icon: '🔄', label: 'Enter Roundabout' };
+    if (type === 'depart') return { icon: '🚀', label: 'Head towards destination' };
+    if (type === 'roundabout' || type === 'rotary') return { icon: '🔄', label: 'Take roundabout exit' };
 
     switch (modifier) {
-        case 'sharp left': return { icon: '↲', label: 'Sharp Left' };
-        case 'left': return { icon: '↰', label: 'Turn Left' };
-        case 'slight left': return { icon: '↖', label: 'Slight Left' };
-        case 'straight': return { icon: '⬆', label: 'Continue Straight' };
-        case 'slight right': return { icon: '↗', label: 'Slight Right' };
-        case 'right': return { icon: '↱', label: 'Turn Right' };
-        case 'sharp right': return { icon: '↳', label: 'Sharp Right' };
-        case 'uturn': return { icon: '↶', label: 'Make U-Turn' };
-        default: return { icon: '⬆', label: 'Head Straight' };
+        case 'sharp left': return { icon: '↲', label: 'Turn sharp left' };
+        case 'left': return { icon: '↰', label: 'Turn left' };
+        case 'slight left': return { icon: '↖', label: 'Slight left' };
+        case 'straight': return { icon: '⬆', label: 'Continue straight' };
+        case 'slight right': return { icon: '↗', label: 'Slight right' };
+        case 'right': return { icon: '↱', label: 'Turn right' };
+        case 'sharp right': return { icon: '↳', label: 'Turn sharp right' };
+        case 'uturn': return { icon: '↶', label: 'Make a U-Turn' };
+        default: return { icon: '⬆', label: 'Head straight' };
     }
 }
 
@@ -88,10 +89,9 @@ function getManeuverIcon(type, modifier) {
 async function calculateCustomRoute() {
     if (userLat === null || targetLat === null) return;
 
-    updateHUDInstruction("Calculating best route...", "OSRM Routing Engine", "⏳", "0 m");
+    updateHUDInstruction("Calculating best route...", "Google Maps OSRM Engine", "⏳", "0 m");
 
     try {
-        // Request OSRM route with steps=true and geometries=geojson
         const url = `https://router.project-osrm.org/route/v1/driving/${userLon},${userLat};${targetLon},${targetLat}?overview=full&geometries=geojson&steps=true`;
         const response = await fetch(url);
         const data = await response.json();
@@ -102,7 +102,6 @@ async function calculateCustomRoute() {
             totalRouteDistance = route.distance;
             totalRouteDuration = route.duration;
 
-            // Extract turn-by-turn maneuver steps
             if (route.legs && route.legs.length > 0) {
                 routeSteps = route.legs[0].steps.map(step => {
                     const iconInfo = getManeuverIcon(step.maneuver.type, step.maneuver.modifier);
@@ -124,15 +123,15 @@ async function calculateCustomRoute() {
             currentStepIndex = 0;
             updateRoute3D();
             updateLeafletRoute();
-            speakManeuver("Route calculated. Follow glowing 3D arrows.");
+            speakManeuver("Route calculated. Follow Google Live View arrows.");
         } else {
             throw new Error('No route returned');
         }
     } catch (e) {
-        console.warn("OSRM routing fallback to direct bearing line:", e);
+        console.warn("OSRM routing fallback:", e);
         routeCoordinates = [];
         routeSteps = [{
-            instruction: "Head Straight to Destination",
+            instruction: "Head straight to destination",
             streetName: "Direct Bearing",
             type: "straight",
             modifier: "straight",
@@ -148,32 +147,54 @@ async function calculateCustomRoute() {
 }
 
 // =========================================================================
-// 3. THREE.JS 3D AR SCENE & GLOWING PATH CREATION
+// 3. AUTHENTIC GOOGLE AR 3D SCENE & RED LOCATION PIN DROP
 // =========================================================================
 
-function createGlowingRibbonTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
+function createGoogleRedPinMesh() {
+    const group = new THREE.Group();
 
-    const grad = ctx.createLinearGradient(0, 0, 128, 0);
-    grad.addColorStop(0, 'rgba(0, 230, 118, 0.2)');
-    grad.addColorStop(0.5, 'rgba(26, 115, 232, 0.9)');
-    grad.addColorStop(1, 'rgba(0, 230, 118, 0.2)');
+    // 1. Google Red Pin Head (Sphere)
+    const sphereGeom = new THREE.SphereGeometry(1.6, 32, 32);
+    const pinMat = new THREE.MeshBasicMaterial({ color: 0xd93025 });
+    const sphere = new THREE.Mesh(sphereGeom, pinMat);
+    sphere.position.y = 5.5;
+    group.add(sphere);
 
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 128, 128);
+    // 2. White center dot
+    const dotGeom = new THREE.SphereGeometry(0.6, 16, 16);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const dot = new THREE.Mesh(dotGeom, dotMat);
+    dot.position.set(0, 5.5, 1.2);
+    group.add(dot);
 
-    // Glowing center line
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(56, 0, 16, 128);
+    // 3. Pin Cone Stem
+    const coneGeom = new THREE.ConeGeometry(1.5, 3.5, 32);
+    const cone = new THREE.Mesh(coneGeom, pinMat);
+    cone.rotation.x = Math.PI; // pointing down
+    cone.position.y = 3.5;
+    group.add(cone);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 10);
-    return texture;
+    // 4. Sky Laser Pillar
+    const cylinderGeom = new THREE.CylinderGeometry(0.6, 0.6, 50, 16, 1, true);
+    const cylinderMat = new THREE.MeshBasicMaterial({
+        color: 0x1a73e8,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide
+    });
+    const laser = new THREE.Mesh(cylinderGeom, cylinderMat);
+    laser.position.y = 25;
+    group.add(laser);
+
+    // 5. Pulsing Ground Ring
+    const ringGeom = new THREE.RingGeometry(1.5, 3.0, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -2;
+    group.add(ring);
+
+    return group;
 }
 
 function createRoadArrowMesh() {
@@ -188,7 +209,7 @@ function createRoadArrowMesh() {
 
     const geometry = new THREE.ShapeGeometry(shape);
     const material = new THREE.MeshBasicMaterial({
-        color: 0x00e676,
+        color: 0xffffff,
         transparent: true,
         opacity: 0.95,
         side: THREE.DoubleSide
@@ -197,22 +218,22 @@ function createRoadArrowMesh() {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = 0.08;
 
-    // Outer glow shadow
+    // Google Blue Outer Drop shadow
     const shadowMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.7,
         side: THREE.DoubleSide
     });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
     shadowMesh.rotation.x = -Math.PI / 2;
-    shadowMesh.scale.set(1.2, 1.2, 1.2);
+    shadowMesh.scale.set(1.25, 1.25, 1.25);
     shadowMesh.position.set(0, 0.02, 0);
 
     const group = new THREE.Group();
     group.add(mesh);
     group.add(shadowMesh);
-    group.scale.set(0.65, 0.65, 0.65);
+    group.scale.set(0.7, 0.7, 0.7);
     return group;
 }
 
@@ -231,7 +252,7 @@ function init3D() {
     containerEl.innerHTML = "";
     containerEl.appendChild(renderer.domElement);
 
-    // Create 3D Chevrons
+    // Create Google 3D Chevrons
     pathArrows = [];
     for (let i = 0; i < maxArrows; i++) {
         const arrow = createRoadArrowMesh();
@@ -283,7 +304,6 @@ function updateRoute3D() {
             }
         }
     } else {
-        // Fallback straight line
         const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
         const dz = (userLat - targetLat) * 111320;
         let nextPoint = new THREE.Vector3(dx, -2.2, dz);
@@ -296,18 +316,16 @@ function updateRoute3D() {
         points.push(nextPoint);
     }
 
-    // Build Curve for 3D Chevrons
     if (points.length >= 2) {
         routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
         routeLength = routeCurve.getLength();
 
-        // Build Glowing Floor Path Ribbon
         if (pathRibbonMesh) scene.remove(pathRibbonMesh);
         const tubeGeom = new THREE.TubeGeometry(routeCurve, 64, 0.45, 8, false);
         const tubeMat = new THREE.MeshBasicMaterial({
-            color: 0x1a73e8,
+            color: 0x4285f4,
             transparent: true,
-            opacity: 0.75,
+            opacity: 0.8,
             wireframe: false
         });
         pathRibbonMesh = new THREE.Mesh(tubeGeom, tubeMat);
@@ -318,41 +336,12 @@ function updateRoute3D() {
         routeLength = 0;
     }
 
-    // Holographic Destination Pillar Marker
+    // Google Maps Red Pin Drop Position
     const finalDx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
     const finalDz = (userLat - targetLat) * 111320;
 
     if (!destinationObject) {
-        destinationObject = new THREE.Group();
-
-        // Laser Sky Cylinder
-        const cylinderGeom = new THREE.CylinderGeometry(0.8, 0.8, 40, 16, 1, true);
-        const cylinderMat = new THREE.MeshBasicMaterial({
-            color: 0x00e676,
-            transparent: true,
-            opacity: 0.45,
-            side: THREE.DoubleSide
-        });
-        const laser = new THREE.Mesh(cylinderGeom, cylinderMat);
-        laser.position.y = 18;
-        destinationObject.add(laser);
-
-        // Rotating Top Pin Diamond
-        const pinGeom = new THREE.OctahedronGeometry(1.8, 0);
-        const pinMat = new THREE.MeshBasicMaterial({ color: 0xff3d00, wireframe: false });
-        const pinMesh = new THREE.Mesh(pinGeom, pinMat);
-        pinMesh.position.y = 5;
-        pinMesh.name = "pinMesh";
-        destinationObject.add(pinMesh);
-
-        // Ground Pulse Rings
-        const ringGeom = new THREE.RingGeometry(1.2, 2.2, 32);
-        const ringMat = new THREE.MeshBasicMaterial({ color: 0x00e676, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
-        const ring = new THREE.Mesh(ringGeom, ringMat);
-        ring.rotation.x = Math.PI / 2;
-        ring.position.y = -2;
-        destinationObject.add(ring);
-
+        destinationObject = createGoogleRedPinMesh();
         scene.add(destinationObject);
     }
     destinationObject.position.set(finalDx, 0, finalDz);
@@ -365,15 +354,8 @@ function animate() {
         controls.update();
     }
 
-    // Rotate destination top pin
-    if (destinationObject) {
-        const pinMesh = destinationObject.getObjectByName("pinMesh");
-        if (pinMesh) pinMesh.rotation.y += 0.03;
-    }
-
-    // Animate Chevrons along route curve
     if (routeCurve && routeLength > 0.1) {
-        const speed = 3.0; // meters / sec
+        const speed = 3.2; // m/s
         const time = Date.now() * 0.001;
 
         for (let i = 0; i < maxArrows; i++) {
@@ -416,19 +398,29 @@ function animate() {
 }
 
 // =========================================================================
-// 4. TURN-BY-TURN INSTRUCTION ENGINE & VOICE ASSISTANT
+// 4. GOOGLE MAPS NAVIGATION HUD & ETA CALCULATOR
 // =========================================================================
 
 function updateHUDInstruction(title, street, iconStr, badgeDistStr) {
     const titleEl = document.getElementById("instruction");
     const streetEl = document.getElementById("street-name");
     const arrowEl = document.getElementById("nav-arrow");
-    const badgeEl = document.getElementById("step-distance-badge");
+    const distMainEl = document.getElementById("step-distance-main");
 
     if (titleEl) titleEl.innerText = title;
     if (streetEl) streetEl.innerText = street;
     if (arrowEl) arrowEl.innerText = iconStr;
-    if (badgeEl) badgeEl.innerText = badgeDistStr;
+    if (distMainEl) distMainEl.innerText = badgeDistStr;
+}
+
+function formatClockTime(date) {
+    let hours = date.getHours();
+    let minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    minutes = minutes < 10 ? '0' + minutes : minutes;
+    return `${hours}:${minutes} ${ampm}`;
 }
 
 function updateInstructions() {
@@ -440,68 +432,69 @@ function updateInstructions() {
     }
 
     if (targetLat === null || targetLon === null) {
-        updateHUDInstruction("Select a destination", "Tap map or search", "📍", "0 m");
+        updateHUDInstruction("Select a destination", "Tap Google Maps or search", "📍", "0 m");
         return;
     }
 
-    // 1. Total remaining distance & ETA
+    // Total distance, ETA duration, and Arrival Clock
     const totalDist = calculateDistance(userLat, userLon, targetLat, targetLon);
     const distEl = document.getElementById("distance");
-    const etaEl = document.getElementById("eta-time");
+    const etaMinEl = document.getElementById("eta-min");
+    const etaClockEl = document.getElementById("eta-clock");
 
     if (distEl) {
         distEl.innerText = totalDist > 1000 ?
-            `Remaining: ${(totalDist / 1000).toFixed(2)} km` :
-            `Remaining: ${totalDist.toFixed(0)} m`;
+            `${(totalDist / 1000).toFixed(1)} km` :
+            `${totalDist.toFixed(0)} m`;
     }
 
-    if (etaEl) {
-        const walkingMin = Math.ceil((totalDist / 1.35) / 60); // 1.35 m/s avg walking
-        etaEl.innerText = `ETA: ~${walkingMin} min`;
+    const walkingMin = Math.max(1, Math.ceil((totalDist / 1.35) / 60)); // 1.35 m/s avg walking speed
+    if (etaMinEl) etaMinEl.innerText = `${walkingMin} min`;
+
+    if (etaClockEl) {
+        const arrivalDate = new Date(Date.now() + walkingMin * 60 * 1000);
+        etaClockEl.innerText = formatClockTime(arrivalDate);
     }
 
-    // 2. Active Step Maneuver Evaluation
+    // Maneuver step calculations
     if (routeSteps.length > 0 && currentStepIndex < routeSteps.length) {
         const step = routeSteps[currentStepIndex];
         const stepDist = calculateDistance(userLat, userLon, step.location[1], step.location[0]);
 
-        // Auto advance to next step if within 15 meters of maneuver point
         if (stepDist < 15 && currentStepIndex < routeSteps.length - 1) {
             currentStepIndex++;
             const newStep = routeSteps[currentStepIndex];
             speakManeuver(newStep.instruction);
         }
 
-        const distStr = stepDist > 1000 ? `In ${(stepDist / 1000).toFixed(1)} km` : `In ${stepDist.toFixed(0)} m`;
+        const distStr = stepDist > 1000 ? `${(stepDist / 1000).toFixed(1)} km` : `${stepDist.toFixed(0)} m`;
         updateHUDInstruction(step.instruction, step.streetName, step.icon, distStr);
 
-        // Voice prompt alerts at key thresholds (150m, 40m)
         if (stepDist < 150 && stepDist > 140) {
             speakManeuver(`In 150 meters, ${step.instruction}`);
         } else if (stepDist < 40 && stepDist > 30) {
             speakManeuver(`In 40 meters, ${step.instruction}`);
         }
     } else {
-        // Direct bearing fallbacks if steps empty
         let targetBearing = bearing(userLat, userLon, targetLat, targetLon);
         let currentHeading = getEffectiveHeading();
 
         let diff = ((targetBearing - currentHeading) + 540) % 360 - 180;
         let icon = "⬆";
-        let title = "Head Straight";
+        let title = "Head straight";
 
         if (Math.abs(diff) < 20) {
-            title = "Head Straight"; icon = "⬆";
+            title = "Head straight"; icon = "⬆";
         } else if (diff >= 20 && diff < 160) {
-            title = "Turn Right"; icon = "↱";
+            title = "Turn right"; icon = "↱";
         } else if (diff <= -20 && diff > -160) {
-            title = "Turn Left"; icon = "↰";
+            title = "Turn left"; icon = "↰";
         } else {
             title = "Make U-Turn"; icon = "↶";
         }
 
-        const distStr = totalDist > 1000 ? `In ${(totalDist / 1000).toFixed(1)} km` : `In ${totalDist.toFixed(0)} m`;
-        updateHUDInstruction(title, "Towards Target", icon, distStr);
+        const distStr = totalDist > 1000 ? `${(totalDist / 1000).toFixed(1)} km` : `${totalDist.toFixed(0)} m`;
+        updateHUDInstruction(title, "Towards destination", icon, distStr);
     }
 }
 
@@ -510,7 +503,7 @@ function speakManeuver(text) {
     lastSpokenText = text;
 
     try {
-        speechSynth.cancel(); // Stop current utterance
+        speechSynth.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
@@ -531,7 +524,7 @@ function toggleVoice() {
 }
 
 // =========================================================================
-// 5. GPS SMOOTHING & GEOLOCATION WATCH
+// 5. GPS SMOOTHING & ACCURACY RING
 // =========================================================================
 
 function filterGPS(rawLat, rawLon, accuracy = 10) {
@@ -559,7 +552,7 @@ function getLocation() {
     if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
             position => {
-                if (simulationActive) return; // Skip real GPS during simulation
+                if (simulationActive) return;
 
                 const rawLat = position.coords.latitude;
                 const rawLon = position.coords.longitude;
@@ -594,15 +587,10 @@ function updateGPSBadge(acc) {
     const gpsEl = document.getElementById("gps-badge");
     if (!gpsEl) return;
     gpsEl.innerText = `GPS Acc: ${acc.toFixed(0)}m`;
-    if (acc < 15) {
-        gpsEl.className = "status-pill green";
-    } else {
-        gpsEl.className = "status-pill yellow";
-    }
 }
 
 // =========================================================================
-// 6. COMPASS & SENSOR FUSION ENGINE
+// 6. COMPASS & MAP ORIENTATION (HEADING-UP vs NORTH-UP)
 // =========================================================================
 
 function getEffectiveHeading() {
@@ -611,16 +599,14 @@ function getEffectiveHeading() {
 }
 
 function startCompass() {
-    // 1. Android Absolute Orientation / Magnetic North
     window.addEventListener('deviceorientationabsolute', function (event) {
         if (event.alpha !== null) {
-            const heading = 360 - event.alpha; // Convert to clockwise heading
+            const heading = 360 - event.alpha;
             compassHeading = smoothHeading(compassHeading, heading);
             updateCompassDisplay();
         }
     }, true);
 
-    // 2. iOS Safari Webkit Compass Heading
     deviceOrientationListener = function (event) {
         let heading = null;
         if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
@@ -635,7 +621,6 @@ function startCompass() {
     };
     window.addEventListener('deviceorientation', deviceOrientationListener, true);
 
-    // 3. AbsoluteOrientationSensor API
     if (typeof AbsoluteOrientationSensor !== 'undefined') {
         try {
             absoluteOrientationSensor = new AbsoluteOrientationSensor({ frequency: 60 });
@@ -659,7 +644,7 @@ function startCompass() {
 function smoothHeading(oldH, newH) {
     if (oldH === null) return newH;
     let diff = ((newH - oldH) + 540) % 360 - 180;
-    return (oldH + 0.25 * diff + 360) % 360; // Exponential moving average filter
+    return (oldH + 0.25 * diff + 360) % 360;
 }
 
 function updateCompassDisplay() {
@@ -667,6 +652,15 @@ function updateCompassDisplay() {
     if (el) {
         const effHeading = getEffectiveHeading();
         el.innerText = `${effHeading.toFixed(0)}°`;
+    }
+    updateLeafletUserMarker();
+}
+
+function toggleMapOrientation() {
+    isHeadingUp = !isHeadingUp;
+    const label = document.getElementById("orient-label");
+    if (label) {
+        label.innerText = isHeadingUp ? "Heading Up" : "North Up";
     }
     updateLeafletUserMarker();
 }
@@ -705,7 +699,7 @@ function stopCompass() {
 }
 
 // =========================================================================
-// 7. LEAFLET MAP & TILE STYLE SWITCHER
+// 7. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION
 // =========================================================================
 
 function initMap() {
@@ -755,21 +749,41 @@ function updateLeafletUserMarker() {
 
     const heading = getEffectiveHeading();
 
+    // Rotate Leaflet map for Heading-Up navigation mode
+    const mapEl = document.getElementById("map");
+    if (mapEl) {
+        if (isHeadingUp) {
+            mapEl.style.transform = `rotate(${-heading}deg)`;
+        } else {
+            mapEl.style.transform = `rotate(0deg)`;
+        }
+    }
+
     if (!userMarker) {
+        // Google Maps Blue User Puck
         const userIcon = L.divIcon({
             className: 'custom-user-marker',
-            html: `<div style="background-color: #1a73e8; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(26,115,232,0.8);"></div>`,
-            iconSize: [22, 22], iconAnchor: [11, 11]
+            html: `<div style="background-color: #1a73e8; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 10px rgba(26,115,232,0.9);"></div>`,
+            iconSize: [24, 24], iconAnchor: [12, 12]
         });
         userMarker = L.marker([userLat, userLon], { icon: userIcon }).addTo(leafletMap);
 
-        // Field of View Cone marker
+        // Google Navigation Beam (Field of View Cone)
         const fovIcon = L.divIcon({
             className: 'leaflet-user-fov-cone',
-            html: `<div style="width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-bottom: 50px solid rgba(26,115,232,0.35); transform: rotate(${heading}deg); transform-origin: 50% 100%;"></div>`,
+            html: `<div style="width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-bottom: 50px solid rgba(26,115,232,0.4); transform: rotate(${isHeadingUp ? 0 : heading}deg); transform-origin: 50% 100%;"></div>`,
             iconSize: [50, 50], iconAnchor: [25, 50]
         });
         userFovCone = L.marker([userLat, userLon], { icon: fovIcon, zIndexOffset: -100 }).addTo(leafletMap);
+
+        // GPS Accuracy circle
+        accuracyCircleMarker = L.circle([userLat, userLon], {
+            radius: rawGpsAccuracy,
+            color: '#1a73e8',
+            fillColor: '#1a73e8',
+            fillOpacity: 0.15,
+            weight: 1
+        }).addTo(leafletMap);
     } else {
         userMarker.setLatLng([userLat, userLon]);
         if (userFovCone) {
@@ -777,8 +791,12 @@ function updateLeafletUserMarker() {
             const coneEl = userFovCone.getElement();
             if (coneEl) {
                 const child = coneEl.querySelector('div');
-                if (child) child.style.transform = `rotate(${heading}deg)`;
+                if (child) child.style.transform = `rotate(${isHeadingUp ? 0 : heading}deg)`;
             }
+        }
+        if (accuracyCircleMarker) {
+            accuracyCircleMarker.setLatLng([userLat, userLon]);
+            accuracyCircleMarker.setRadius(rawGpsAccuracy);
         }
     }
 
@@ -792,25 +810,45 @@ function updateLeafletRoute() {
 
     if (targetLat !== null && targetLon !== null) {
         if (!targetMarker) {
-            targetMarker = L.marker([targetLat, targetLon]).addTo(leafletMap);
+            const pinIcon = L.divIcon({
+                className: 'custom-target-pin',
+                html: `<div style="background-color: #d93025; width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.4);"><div style="width: 8px; height: 8px; background: #fff; border-radius: 50%; margin: 5px auto;"></div></div>`,
+                iconSize: [24, 24], iconAnchor: [12, 24]
+            });
+            targetMarker = L.marker([targetLat, targetLon], { icon: pinIcon }).addTo(leafletMap);
         } else {
             targetMarker.setLatLng([targetLat, targetLon]);
         }
     }
 
     if (mapRouteLine) leafletMap.removeLayer(mapRouteLine);
+    maneuverMapMarkers.forEach(m => leafletMap.removeLayer(m));
+    maneuverMapMarkers = [];
 
     if (routeCoordinates.length > 0) {
         let latlngs = routeCoordinates.map(coord => [coord[1], coord[0]]);
         if (userLat !== null && userLon !== null) latlngs.unshift([userLat, userLon]);
 
-        const outerLine = L.polyline(latlngs, { color: '#0d47a1', weight: 8, opacity: 0.8 });
-        const innerLine = L.polyline(latlngs, { color: '#00e676', weight: 4, opacity: 1.0 });
+        const outerLine = L.polyline(latlngs, { color: '#185abc', weight: 9, opacity: 0.9 });
+        const innerLine = L.polyline(latlngs, { color: '#4285f4', weight: 5, opacity: 1.0 });
         mapRouteLine = L.layerGroup([outerLine, innerLine]).addTo(leafletMap);
+
+        // Add maneuver icons on Leaflet map polyline
+        if (routeSteps.length > 0) {
+            routeSteps.forEach(step => {
+                const stepIcon = L.divIcon({
+                    className: 'map-step-node',
+                    html: `<div style="background: #ffffff; color: #1a73e8; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #1a73e8; font-size: 10px; font-weight: 800; text-align: center; line-height: 14px;">${step.icon}</div>`,
+                    iconSize: [18, 18], iconAnchor: [9, 9]
+                });
+                const mMarker = L.marker([step.location[1], step.location[0]], { icon: stepIcon }).addTo(leafletMap);
+                maneuverMapMarkers.push(mMarker);
+            });
+        }
 
         if (userLat !== null && userLon !== null) {
             const bounds = L.latLngBounds([userLat, userLon], [targetLat, targetLon]);
-            leafletMap.fitBounds(bounds, { padding: [30, 30] });
+            leafletMap.fitBounds(bounds, { padding: [35, 35] });
         }
     }
 }
@@ -843,7 +881,7 @@ function recenterMap() {
 }
 
 // =========================================================================
-// 8. TEST DEMO SIMULATION ENGINE (FOR INDOOR & DESKTOP TESTING)
+// 8. TEST DEMO WALK SIMULATION ENGINE
 // =========================================================================
 
 function toggleSimulation() {
@@ -852,14 +890,14 @@ function toggleSimulation() {
 
     if (simulationActive) {
         if (routeCoordinates.length < 2) {
-            alert("Please select a destination to generate a route before starting simulation!");
+            alert("Please select a destination to calculate route before starting simulation!");
             simulationActive = false;
             return;
         }
-        btn.className = "glass-tool-btn demo-btn liked";
+        btn.className = "gmaps-fab-btn demo-btn";
         btn.innerHTML = `⏸ <span class="tool-label">Stop Walk</span>`;
         simStepIndex = 0;
-        speakManeuver("Starting demo walk simulation.");
+        speakManeuver("Starting Google Maps demo walk.");
 
         simulationTimer = setInterval(() => {
             if (simStepIndex < routeCoordinates.length) {
@@ -867,7 +905,6 @@ function toggleSimulation() {
                 userLon = coord[0];
                 userLat = coord[1];
 
-                // Calculate simulated compass bearing to next point
                 if (simStepIndex < routeCoordinates.length - 1) {
                     const nextCoord = routeCoordinates[simStepIndex + 1];
                     compassHeading = bearing(userLat, userLon, nextCoord[1], nextCoord[0]);
@@ -881,9 +918,9 @@ function toggleSimulation() {
                 toggleSimulation();
                 speakManeuver("You have arrived at your destination.");
             }
-        }, 1200);
+        }, 1100);
     } else {
-        btn.className = "glass-tool-btn demo-btn";
+        btn.className = "gmaps-fab-btn demo-btn";
         btn.innerHTML = `▶ <span class="tool-label">Demo Walk</span>`;
         if (simulationTimer) clearInterval(simulationTimer);
         simulationTimer = null;
@@ -891,7 +928,7 @@ function toggleSimulation() {
 }
 
 // =========================================================================
-// 9. DESTINATION PICKER & NOMINATIM SEARCH
+// 9. GOOGLE MAPS DESTINATION PICKER & NOMINATIM SEARCH
 // =========================================================================
 
 let pickerMap = null;
@@ -921,10 +958,15 @@ function setPickedDestination(lat, lng, label) {
     _selectedLon = lng;
 
     if (pickerMarker) pickerMap.removeLayer(pickerMarker);
-    pickerMarker = L.marker([lat, lng]).addTo(pickerMap);
+    const pinIcon = L.divIcon({
+        className: 'custom-target-pin',
+        html: `<div style="background-color: #d93025; width: 24px; height: 24px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.4);"><div style="width: 8px; height: 8px; background: #fff; border-radius: 50%; margin: 6px auto;"></div></div>`,
+        iconSize: [26, 26], iconAnchor: [13, 26]
+    });
+    pickerMarker = L.marker([lat, lng], { icon: pinIcon }).addTo(pickerMap);
 
     document.getElementById('selected-coords').innerText = `Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    document.getElementById('picker-instruction').innerText = label || '📍 Destination set! Tap button to start AR Live View';
+    document.getElementById('picker-instruction').innerText = label || '📍 Destination set! Tap Start Navigation to begin';
     document.getElementById('start-nav-btn').style.display = 'flex';
 }
 
@@ -997,8 +1039,6 @@ function startAR() {
 function proceedWithAR(orientationGranted) {
     document.getElementById("destination-picker").style.display = "none";
     document.getElementById("ui-overlay").style.display = "flex";
-    document.getElementById("ar-destination-title").innerText =
-        `Destination: ${_selectedLat.toFixed(4)}, ${_selectedLon.toFixed(4)}`;
     hasStarted = true;
 
     targetLat = _selectedLat;
@@ -1041,8 +1081,9 @@ function stopAR() {
         leafletMap.remove();
         leafletMap = null; userMarker = null; userFovCone = null;
         targetMarker = null; mapRouteLine = null; isMapExpanded = false;
+        accuracyCircleMarker = null; maneuverMapMarkers = [];
         document.getElementById("minimap-container").classList.remove("expanded");
-        document.getElementById("toggle-map-btn").innerText = "⛶ Expand Map";
+        document.getElementById("toggle-map-btn").innerText = "⛕ Expand Map";
     }
 
     setTimeout(() => { if (pickerMap) pickerMap.invalidateSize(); }, 100);
@@ -1051,31 +1092,15 @@ function stopAR() {
 function startCamera() {
     const video = document.getElementById('camera-feed');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        updateHUDInstruction("Camera Not Supported", "AR Navigation running without video stream", "📷", "0 m");
+        updateHUDInstruction("Camera Not Supported", "Navigation running without AR video", "📷", "0 m");
         return;
     }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; })
         .catch(err => {
             console.warn("Camera access denied:", err);
-            updateHUDInstruction("Camera Permission Denied", "AR path rendered on fallback background", "📷", "0 m");
+            updateHUDInstruction("Camera Permission Denied", "Navigation running on fallback", "📷", "0 m");
         });
-}
-
-// Like functionality
-let isLiked = false;
-function toggleLike() {
-    isLiked = !isLiked;
-    const btn = document.getElementById('like-btn');
-    if (btn) {
-        if (isLiked) {
-            btn.classList.add('liked');
-            btn.innerHTML = "💖 <span class=\"tool-label\">Saved</span>";
-        } else {
-            btn.classList.remove('liked');
-            btn.innerHTML = "❤️ <span class=\"tool-label\">Like</span>";
-        }
-    }
 }
 
 // Math helpers

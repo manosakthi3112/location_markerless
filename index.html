@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D AR Live View Navigation</title>
+    <title>Google Maps AR Live View Navigation</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Product+Sans:wght@400;500;700&family=Roboto:wght@400;500;700;900&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
 
     <!-- Three.js and Device Controls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -38,7 +38,7 @@
         <div id="search-container">
             <div class="search-bar-wrapper">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="search-input" placeholder="Search destination or tap map..." oninput="handleSearch()" autocomplete="off">
+                <input type="text" id="search-input" placeholder="Search Google Maps or tap map..." oninput="handleSearch()" autocomplete="off">
                 <button class="search-clear-btn" id="search-clear" onclick="clearSearch()">&times;</button>
             </div>
             <div id="search-results"></div>
@@ -53,71 +53,67 @@
 
         <div id="picker-map"></div>
 
-        <div id="picker-bottom" class="glass-card">
+        <div id="picker-bottom" class="gmaps-picker-bottom">
             <div class="sheet-handle"></div>
-            <p id="picker-instruction">📍 Tap anywhere on the map to choose your destination</p>
+            <p id="picker-instruction">📍 Tap anywhere on Google Maps to select destination</p>
             <p id="selected-coords">Coordinates: --</p>
             <div class="picker-action-group">
-                <button id="start-nav-btn" class="primary-nav-btn" style="display:none;" onclick="startAR()">
-                    <span class="btn-icon">🚶</span> Start Live AR Navigation
+                <button id="start-nav-btn" class="gmaps-start-btn" style="display:none;" onclick="startAR()">
+                    <span class="btn-icon">▲</span> Start Navigation
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Active Navigation Overlay (AR HUD) -->
+    <!-- Active Navigation Overlay (Authentic Google Maps Live View HUD) -->
     <div id="ui-overlay" style="display: none;">
-        <!-- Top Turn-by-Turn Instruction Header Card -->
-        <div id="top-nav-panel" class="glass-panel">
-            <div class="nav-icon-container" id="nav-icon-box">
-                <span id="nav-arrow" class="maneuver-arrow">↑</span>
+        <!-- Top Google Maps Signature Green Header -->
+        <div id="top-nav-panel" class="gmaps-top-header">
+            <div class="gmaps-nav-icon-box" id="nav-icon-box">
+                <span id="nav-arrow" class="gmaps-maneuver-arrow">↑</span>
             </div>
-            <div class="nav-text-container">
-                <div class="instruction-main">
-                    <h3 id="instruction">Calculating route...</h3>
-                    <span id="step-distance-badge" class="step-badge">In 0 m</span>
+            <div class="gmaps-nav-text-box">
+                <div class="gmaps-step-main">
+                    <span id="step-distance-main" class="gmaps-dist-large">-- m</span>
+                    <h3 id="instruction" class="gmaps-instruction-title">Calculating route...</h3>
                 </div>
-                <p id="street-name" class="street-subtext">Calculating route...</p>
-                <div id="sub-nav-bar">
-                    <span id="distance">Distance: --</span>
-                    <span class="dot-divider">•</span>
-                    <span id="eta-time">ETA: --</span>
-                    <span class="dot-divider">•</span>
-                    <span id="gps-badge" class="status-pill green">GPS Acc: 0m</span>
+                <p id="street-name" class="gmaps-street-subtext">Calculating route...</p>
+                <div id="next-step-preview" class="gmaps-next-preview">
+                    <span>Next: Continue along path</span>
                 </div>
             </div>
         </div>
 
         <!-- Floating Action Tools (Right Column) -->
         <div id="middle-tools">
-            <button id="voice-btn" class="glass-tool-btn" onclick="toggleVoice()" title="Toggle Voice Guidance">
+            <button id="orient-mode-btn" class="gmaps-fab-btn" onclick="toggleMapOrientation()" title="Toggle Heading Up Map">
+                🧭 <span class="tool-label" id="orient-label">Heading Up</span>
+            </button>
+
+            <button id="voice-btn" class="gmaps-fab-btn" onclick="toggleVoice()" title="Toggle Voice Guidance">
                 🔊 <span class="tool-label">Voice ON</span>
             </button>
 
-            <button id="compass-btn" class="glass-tool-btn" onclick="toggleCompassModal()" title="Compass Alignment">
-                🧭 <span class="tool-label" id="compass-info">0°</span>
-            </button>
-
-            <button id="map-style-btn" class="glass-tool-btn" onclick="toggleMapStyle()" title="Map Style">
+            <button id="map-style-btn" class="gmaps-fab-btn" onclick="toggleMapStyle()" title="Map Style">
                 🗺️ <span class="tool-label">Street</span>
             </button>
 
-            <button id="sim-btn" class="glass-tool-btn demo-btn" onclick="toggleSimulation()" title="Test Walk Simulation">
+            <button id="sim-btn" class="gmaps-fab-btn demo-btn" onclick="toggleSimulation()" title="Test Walk Simulation">
                 ▶ <span class="tool-label">Demo Walk</span>
             </button>
 
-            <button id="like-btn" class="glass-tool-btn" onclick="toggleLike()" title="Save Route">
-                ❤️ <span class="tool-label">Like</span>
+            <button id="compass-btn" class="gmaps-fab-btn" onclick="toggleCompassModal()" title="Compass Alignment">
+                ⚙️ <span class="tool-label" id="compass-info">0°</span>
             </button>
         </div>
 
         <!-- Compass Manual Calibration Modal -->
         <div id="compass-modal" class="glass-modal" style="display: none;">
             <div class="modal-header">
-                <h4>🧭 Compass Calibration</h4>
+                <h4>⚙️ Compass Alignment</h4>
                 <button class="close-modal-btn" onclick="toggleCompassModal()">&times;</button>
             </div>
-            <p class="modal-desc">If 3D arrows are pointing slightly off, adjust compass offset below:</p>
+            <p class="modal-desc">Fine-tune AR heading if street path is slightly offset:</p>
             <div class="compass-nudge-group">
                 <button class="nudge-btn" onclick="nudgeCompass(-5)">-5°</button>
                 <span id="compass-offset-label">Offset: 0°</span>
@@ -126,25 +122,32 @@
             <button class="modal-action-btn" onclick="resetCompassOffset()">Reset Alignment</button>
         </div>
 
-        <!-- Bottom Sheet Banner -->
-        <div id="bottom-sheet" class="glass-card">
+        <!-- Google Maps Signature ETA Bottom Card -->
+        <div id="bottom-sheet" class="gmaps-bottom-card">
             <div class="sheet-handle"></div>
-            <div class="sheet-content-row">
-                <div class="destination-info">
-                    <h2 id="ar-destination-title" class="destination-title">Target Destination</h2>
-                    <p id="ar-destination-subtitle" class="destination-subtitle">Markerless AR Live Navigation</p>
+            <div class="gmaps-eta-row">
+                <div class="gmaps-eta-left">
+                    <span id="eta-min" class="gmaps-eta-highlight">-- min</span>
+                    <span class="gmaps-eta-details">
+                        <span id="distance">-- m</span> • <span id="eta-clock">--:--</span>
+                    </span>
                 </div>
-                <button class="end-nav-btn" onclick="stopAR()">
-                    ❌ End Navigation
-                </button>
+                <div class="gmaps-eta-center">
+                    <span id="gps-badge" class="gmaps-gps-pill">GPS Acc: 0m</span>
+                </div>
+                <div class="gmaps-eta-right">
+                    <button class="gmaps-exit-btn" onclick="stopAR()" title="Exit Navigation">
+                        ✖ Exit
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- Collapsible Interactive Minimap Container -->
-        <div id="minimap-container" class="glass-map-container">
+        <!-- Collapsible Interactive Google Minimap Container -->
+        <div id="minimap-container" class="gmaps-map-container">
             <div id="map"></div>
             <div class="map-controls-bar">
-                <button id="toggle-map-btn" class="map-btn" onclick="toggleMap()">⛶ Expand Map</button>
+                <button id="toggle-map-btn" class="map-btn" onclick="toggleMap()">⛕ Expand Map</button>
                 <button id="recenter-map-btn" class="map-btn" onclick="recenterMap()">🎯 Center</button>
             </div>
         </div>
