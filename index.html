@@ -63,12 +63,13 @@
             <span class="fab-text">My Location</span>
         </button>
 
+        <!-- Always Visible Home Page Bottom Navigation Sheet -->
         <div id="picker-bottom" class="gmaps-picker-bottom">
             <div class="sheet-handle"></div>
-            <p id="picker-instruction">📍 Requesting GPS location... Tap map to pick destination</p>
-            <p id="selected-coords">Coordinates: --</p>
+            <p id="picker-instruction">📍 Tap map or search to set destination</p>
+            <p id="selected-coords">Coordinates: Ready for navigation</p>
             <div class="picker-action-group">
-                <button id="start-nav-btn" class="gmaps-start-btn" style="display:none;" onclick="startAR()">
+                <button id="start-nav-btn" class="gmaps-start-btn" onclick="startAR()">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
                     <span>Start Navigation</span>
                 </button>

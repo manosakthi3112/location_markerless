@@ -478,13 +478,11 @@ function animate() {
         controls.update();
     }
 
-    // 3D Flyover Overhead Camera Animation Mode
     if (isFlyoverMode && routeCurve && routeLength > 0.1) {
         const time = Date.now() * 0.0004;
         const t = (time % 1.0);
         const flyPt = routeCurve.getPointAt(t);
 
-        // Position camera 32 meters above and slightly behind current route point
         camera.position.set(flyPt.x, 32, flyPt.z + 20);
         camera.lookAt(flyPt.x, GROUND_Y, flyPt.z);
     }
@@ -537,7 +535,6 @@ function animate() {
     }
 }
 
-// Update Screen-Edge AR Waypoint Target Beacon
 function updateARBeacon() {
     const beaconEl = document.getElementById("ar-target-beacon");
     const beaconArrowEl = document.getElementById("beacon-arrow");
@@ -1061,7 +1058,7 @@ function toggleMap() {
     } else {
         container.classList.remove("expanded");
         if (label) label.innerText = "Expand Map";
-        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="10" y2="14"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="10" y2="14"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
     }
 
     setTimeout(() => {
@@ -1232,7 +1229,14 @@ function quickSearch(placeName) {
 // =========================================================================
 
 function startAR() {
-    if (_selectedLat === null || _selectedLon === null) return;
+    // If no destination is set yet when tapping Start Navigation, auto-pick default landmark
+    if (_selectedLat === null || _selectedLon === null) {
+        if (userLat !== null && userLon !== null) {
+            setPickedDestination(userLat + 0.003, userLon + 0.003, "Karpagam Campus (Auto Set)");
+        } else {
+            setPickedDestination(10.678645, 77.032418, "Karpagam Campus");
+        }
+    }
 
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
