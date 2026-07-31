@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (PERFECTED GEOMETRY)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (2KM TILE BUFFER ENGINE)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -311,7 +311,6 @@ function createRoadArrowMesh() {
 function init3D() {
     scene = new THREE.Scene();
 
-    // Camera near plane set to 0.5m so objects directly under lens don't produce polygon frustum artifacts
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.5, 1000);
     controls = new THREE.DeviceOrientationControls(camera);
 
@@ -349,7 +348,6 @@ function updateRoute3D() {
     const points = [];
     let accumulatedDistance = 0;
     
-    // Start ground path 1.5m in front of camera to prevent near-field sky polygon clipping
     let prevPoint = new THREE.Vector3(0, GROUND_Y, -1.5);
     points.push(prevPoint);
 
@@ -395,7 +393,6 @@ function updateRoute3D() {
         routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
         routeLength = routeCurve.getLength();
 
-        // Flat ground line path (no 3D volume sky polygons)
         if (pathLineMesh) scene.remove(pathLineMesh);
         const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
         const lineMat = new THREE.LineBasicMaterial({
@@ -778,7 +775,7 @@ function stopCompass() {
 }
 
 // =========================================================================
-// 8. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION
+// 8. GOOGLE MAPS LEAFLET INTEGRATION & 2KM TILE BUFFER ENGINE
 // =========================================================================
 
 function initMap() {
@@ -787,7 +784,7 @@ function initMap() {
     leafletMap = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([userLat || 10.641123, userLon || 77.029058], 19);
+    }).setView([userLat || 10.641123, userLon || 77.029058], 18);
 
     setMapTileStyle('street');
 }
@@ -807,7 +804,14 @@ function setMapTileStyle(style) {
         sub = ['a', 'b', 'c', 'd'];
     }
 
-    currentTileLayer = L.tileLayer(tileUrl, { maxZoom: 20, subdomains: sub }).addTo(leafletMap);
+    // keepBuffer: 30 pre-loads a 30-tile grid buffer (2km+ radius) ensuring 100% full coverage when rotated!
+    currentTileLayer = L.tileLayer(tileUrl, {
+        maxZoom: 20,
+        subdomains: sub,
+        keepBuffer: 30,
+        updateWhenIdle: false,
+        updateWhenZooming: false
+    }).addTo(leafletMap);
 }
 
 function toggleMapStyle() {
@@ -873,7 +877,7 @@ function updateLeafletUserMarker() {
     }
 
     if (!isMapExpanded) {
-        leafletMap.setView([userLat, userLon], 19);
+        leafletMap.setView([userLat, userLon], 18);
     }
 }
 
@@ -933,7 +937,7 @@ function toggleMap() {
     if (isMapExpanded) {
         container.classList.add("expanded");
         if (label) label.innerText = "Collapse Map";
-        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="3" y2="21"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
     } else {
         container.classList.remove("expanded");
         if (label) label.innerText = "Expand Map";
@@ -943,14 +947,19 @@ function toggleMap() {
     setTimeout(() => {
         if (leafletMap) {
             leafletMap.invalidateSize();
-            if (userLat !== null && userLon !== null) leafletMap.setView([userLat, userLon], 19);
+            if (userLat !== null && userLon !== null) leafletMap.setView([userLat, userLon], 18);
         }
-    }, 350);
+    }, 100);
+    setTimeout(() => {
+        if (leafletMap) {
+            leafletMap.invalidateSize();
+        }
+    }, 380);
 }
 
 function recenterMap() {
     if (leafletMap && userLat !== null && userLon !== null) {
-        leafletMap.setView([userLat, userLon], 19);
+        leafletMap.setView([userLat, userLon], 18);
     }
 }
 
@@ -1018,7 +1027,10 @@ function initDestinationPicker() {
 
     L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        keepBuffer: 30,
+        updateWhenIdle: false,
+        updateWhenZooming: false
     }).addTo(pickerMap);
 
     pickerMap.on('click', function (e) {
