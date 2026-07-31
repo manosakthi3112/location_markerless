@@ -404,7 +404,7 @@ body {
 }
 
 /* =========================================================================
-   INTERACTIVE SIDE GOOGLE MINIMAP
+   INTERACTIVE SIDE GOOGLE MINIMAP (SEAMLESS ROTATION COVERAGE)
    ========================================================================= */
 .gmaps-map-container {
     pointer-events: auto;
@@ -428,9 +428,13 @@ body {
     bottom: calc(95px + env(safe-area-inset-bottom, 0px));
 }
 
+/* Oversized square positioning so rotated map canvas 100% fills container without grey gaps */
 #map {
-    width: 100%;
-    height: 100%;
+    position: absolute !important;
+    width: 260% !important;
+    height: 260% !important;
+    top: -80% !important;
+    left: -80% !important;
     transform-origin: center center;
     transition: transform 0.2s ease-out;
 }
@@ -537,7 +541,7 @@ body {
     border-radius: 14px;
     margin-top: 8px;
     max-height: 220px;
-    overflow-y_ auto;
+    overflow-y: auto;
     box-shadow: 0 6px 18px rgba(0,0,0,0.2);
     color: #202124;
 }

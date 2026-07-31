@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (GROUND PLANE LOCKED)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (PERFECTED GEOMETRY)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -7,7 +7,7 @@ let scene, camera, renderer, controls;
 let userLat = null, userLon = null;
 let targetLat = null, targetLon = null;
 let destinationObject = null;
-let pathRibbonMesh = null;
+let pathLineMesh = null;
 let pathArrows = [];
 let maxArrows = 18;
 let arrowSpacing = 2.2; // meters
@@ -229,28 +229,24 @@ async function calculateCustomRoute() {
 function createGoogleRedPinMesh() {
     const group = new THREE.Group();
 
-    // Red Pin Head
     const sphereGeom = new THREE.SphereGeometry(1.5, 32, 32);
     const pinMat = new THREE.MeshBasicMaterial({ color: 0xd93025 });
     const sphere = new THREE.Mesh(sphereGeom, pinMat);
     sphere.position.y = 5.0;
     group.add(sphere);
 
-    // White Center Dot
     const dotGeom = new THREE.SphereGeometry(0.55, 16, 16);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.set(0, 5.0, 1.1);
     group.add(dot);
 
-    // Pin Cone Stem pointing to ground
     const coneGeom = new THREE.ConeGeometry(1.4, 3.2, 32);
     const cone = new THREE.Mesh(coneGeom, pinMat);
     cone.rotation.x = Math.PI;
     cone.position.y = 3.0;
     group.add(cone);
 
-    // Sky Laser Cylinder
     const cylinderGeom = new THREE.CylinderGeometry(0.5, 0.5, 60, 16, 1, true);
     const cylinderMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
@@ -262,7 +258,6 @@ function createGoogleRedPinMesh() {
     laser.position.y = 30;
     group.add(laser);
 
-    // Pulsing Ground Base Ring (Sits directly on the asphalt surface at y=0.02 in local space)
     const ringGeom = new THREE.RingGeometry(1.5, 3.2, 32);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
     const ring = new THREE.Mesh(ringGeom, ringMat);
@@ -274,7 +269,6 @@ function createGoogleRedPinMesh() {
 }
 
 function createRoadArrowMesh() {
-    // Chevron shape created in 2D plane
     const shape = new THREE.Shape();
     shape.moveTo(0, 1.8);
     shape.lineTo(-1.4, -0.6);
@@ -286,7 +280,6 @@ function createRoadArrowMesh() {
 
     const geometry = new THREE.ShapeGeometry(shape);
     
-    // Top white chevron mesh lying flat on XZ ground plane
     const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
@@ -294,10 +287,9 @@ function createRoadArrowMesh() {
         side: THREE.DoubleSide
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2; // Flat on ground
+    mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = 0.04;
 
-    // Google Blue outer shadow border lying flat on ground
     const shadowMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
         transparent: true,
@@ -305,7 +297,7 @@ function createRoadArrowMesh() {
         side: THREE.DoubleSide
     });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
-    shadowMesh.rotation.x = -Math.PI / 2; // Flat on ground
+    shadowMesh.rotation.x = -Math.PI / 2;
     shadowMesh.scale.set(1.25, 1.25, 1.25);
     shadowMesh.position.set(0, 0.01, 0);
 
@@ -319,7 +311,8 @@ function createRoadArrowMesh() {
 function init3D() {
     scene = new THREE.Scene();
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // Camera near plane set to 0.5m so objects directly under lens don't produce polygon frustum artifacts
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.5, 1000);
     controls = new THREE.DeviceOrientationControls(camera);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -355,8 +348,9 @@ function updateRoute3D() {
 
     const points = [];
     let accumulatedDistance = 0;
-    // All route curve points strictly set on GROUND_Y (-1.6m)
-    let prevPoint = new THREE.Vector3(0, GROUND_Y, 0);
+    
+    // Start ground path 1.5m in front of camera to prevent near-field sky polygon clipping
+    let prevPoint = new THREE.Vector3(0, GROUND_Y, -1.5);
     points.push(prevPoint);
 
     if (routeCoordinates.length > 0) {
@@ -375,7 +369,7 @@ function updateRoute3D() {
                 const exactLengthNeeded = segDist - overshoot;
                 const dir = nextPoint.clone().sub(prevPoint).normalize();
                 const exactPoint = prevPoint.clone().add(dir.multiplyScalar(exactLengthNeeded));
-                exactPoint.y = GROUND_Y; // Lock Y strictly to ground
+                exactPoint.y = GROUND_Y;
                 points.push(exactPoint);
                 break;
             } else {
@@ -401,26 +395,23 @@ function updateRoute3D() {
         routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
         routeLength = routeCurve.getLength();
 
-        // Build Flat Ground Ribbon Path Mesh
-        if (pathRibbonMesh) scene.remove(pathRibbonMesh);
-        const tubeGeom = new THREE.TubeGeometry(routeCurve, 64, 0.4, 8, false);
-        const tubeMat = new THREE.MeshBasicMaterial({
+        // Flat ground line path (no 3D volume sky polygons)
+        if (pathLineMesh) scene.remove(pathLineMesh);
+        const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+        const lineMat = new THREE.LineBasicMaterial({
             color: 0x4285f4,
+            linewidth: 6,
             transparent: true,
-            opacity: 0.85,
-            wireframe: false
+            opacity: 0.85
         });
-        pathRibbonMesh = new THREE.Mesh(tubeGeom, tubeMat);
-        // Flatten tube vertically so it rests flat on asphalt ground surface
-        pathRibbonMesh.scale.set(1.0, 0.12, 1.0);
-        pathRibbonMesh.position.y = 0.01;
-        scene.add(pathRibbonMesh);
+        pathLineMesh = new THREE.Line(lineGeom, lineMat);
+        pathLineMesh.position.y = 0.01;
+        scene.add(pathLineMesh);
     } else {
         routeCurve = null;
         routeLength = 0;
     }
 
-    // Google Maps Red Pin Drop Position strictly anchored on ground level
     const finalDx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
     const finalDz = (userLat - targetLat) * 111320;
 
@@ -452,14 +443,11 @@ function animate() {
                 pathArrows[i].visible = true;
                 const pt = routeCurve.getPointAt(t);
 
-                // Position strictly on GROUND_Y plane (-1.6m)
                 pathArrows[i].position.set(pt.x, GROUND_Y + 0.03, pt.z);
 
-                // Calculate 2D road direction tangent on horizontal ground plane
                 const tangent = routeCurve.getTangentAt(t).normalize();
                 const headingAngle = Math.atan2(tangent.x, -tangent.z);
 
-                // Rotate strictly around vertical Y-axis so chevron lies 100% FLAT on ground
                 pathArrows[i].rotation.set(0, headingAngle, 0);
 
                 let opacity = 0.95;
@@ -843,13 +831,7 @@ function updateLeafletUserMarker() {
 
     const mapEl = document.getElementById("map");
     if (mapEl) {
-        if (isHeadingUp) {
-            mapEl.style.transform = `rotate(${-heading}deg) scale(1.85)`;
-            mapEl.style.transformOrigin = `center center`;
-        } else {
-            mapEl.style.transform = `rotate(0deg) scale(1.0)`;
-            mapEl.style.transformOrigin = `center center`;
-        }
+        mapEl.style.transform = isHeadingUp ? `rotate(${-heading}deg)` : `rotate(0deg)`;
     }
 
     if (!userMarker) {
@@ -1167,7 +1149,7 @@ function stopAR() {
     stopCompass();
 
     scene = null; camera = null; renderer = null; controls = null;
-    pathRibbonMesh = null; destinationObject = null;
+    pathLineMesh = null; destinationObject = null;
     pathArrows = []; routeCoordinates = []; routeSteps = [];
 
     if (leafletMap) {
