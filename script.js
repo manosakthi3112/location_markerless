@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (VECTOR SVG ENGINE)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (GROUND PLANE LOCKED)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -12,6 +12,9 @@ let pathArrows = [];
 let maxArrows = 18;
 let arrowSpacing = 2.2; // meters
 let hasStarted = false;
+
+// Constant Ground Plane Elevation (eye-level camera at y=0, ground at y=-1.6m)
+const GROUND_Y = -1.6;
 
 // --- GPS Kalman Filter & Accuracy State ---
 let kf = {
@@ -220,31 +223,35 @@ async function calculateCustomRoute() {
 }
 
 // =========================================================================
-// 4. THREE.JS 3D SCENE & GOOGLE RED PIN DROP
+// 4. THREE.JS 3D AR SCENE & GROUND PLANE OBJECTS
 // =========================================================================
 
 function createGoogleRedPinMesh() {
     const group = new THREE.Group();
 
-    const sphereGeom = new THREE.SphereGeometry(1.6, 32, 32);
+    // Red Pin Head
+    const sphereGeom = new THREE.SphereGeometry(1.5, 32, 32);
     const pinMat = new THREE.MeshBasicMaterial({ color: 0xd93025 });
     const sphere = new THREE.Mesh(sphereGeom, pinMat);
-    sphere.position.y = 5.5;
+    sphere.position.y = 5.0;
     group.add(sphere);
 
-    const dotGeom = new THREE.SphereGeometry(0.6, 16, 16);
+    // White Center Dot
+    const dotGeom = new THREE.SphereGeometry(0.55, 16, 16);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const dot = new THREE.Mesh(dotGeom, dotMat);
-    dot.position.set(0, 5.5, 1.2);
+    dot.position.set(0, 5.0, 1.1);
     group.add(dot);
 
-    const coneGeom = new THREE.ConeGeometry(1.5, 3.5, 32);
+    // Pin Cone Stem pointing to ground
+    const coneGeom = new THREE.ConeGeometry(1.4, 3.2, 32);
     const cone = new THREE.Mesh(coneGeom, pinMat);
     cone.rotation.x = Math.PI;
-    cone.position.y = 3.5;
+    cone.position.y = 3.0;
     group.add(cone);
 
-    const cylinderGeom = new THREE.CylinderGeometry(0.6, 0.6, 50, 16, 1, true);
+    // Sky Laser Cylinder
+    const cylinderGeom = new THREE.CylinderGeometry(0.5, 0.5, 60, 16, 1, true);
     const cylinderMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
         transparent: true,
@@ -252,20 +259,22 @@ function createGoogleRedPinMesh() {
         side: THREE.DoubleSide
     });
     const laser = new THREE.Mesh(cylinderGeom, cylinderMat);
-    laser.position.y = 25;
+    laser.position.y = 30;
     group.add(laser);
 
-    const ringGeom = new THREE.RingGeometry(1.5, 3.0, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    // Pulsing Ground Base Ring (Sits directly on the asphalt surface at y=0.02 in local space)
+    const ringGeom = new THREE.RingGeometry(1.5, 3.2, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
     const ring = new THREE.Mesh(ringGeom, ringMat);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = -2;
+    ring.position.y = 0.02;
     group.add(ring);
 
     return group;
 }
 
 function createRoadArrowMesh() {
+    // Chevron shape created in 2D plane
     const shape = new THREE.Shape();
     shape.moveTo(0, 1.8);
     shape.lineTo(-1.4, -0.6);
@@ -276,6 +285,8 @@ function createRoadArrowMesh() {
     shape.lineTo(0, 1.8);
 
     const geometry = new THREE.ShapeGeometry(shape);
+    
+    // Top white chevron mesh lying flat on XZ ground plane
     const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
@@ -283,19 +294,20 @@ function createRoadArrowMesh() {
         side: THREE.DoubleSide
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.08;
+    mesh.rotation.x = -Math.PI / 2; // Flat on ground
+    mesh.position.y = 0.04;
 
+    // Google Blue outer shadow border lying flat on ground
     const shadowMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.75,
         side: THREE.DoubleSide
     });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
-    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.rotation.x = -Math.PI / 2; // Flat on ground
     shadowMesh.scale.set(1.25, 1.25, 1.25);
-    shadowMesh.position.set(0, 0.02, 0);
+    shadowMesh.position.set(0, 0.01, 0);
 
     const group = new THREE.Group();
     group.add(mesh);
@@ -343,7 +355,8 @@ function updateRoute3D() {
 
     const points = [];
     let accumulatedDistance = 0;
-    let prevPoint = new THREE.Vector3(0, -2.2, 0);
+    // All route curve points strictly set on GROUND_Y (-1.6m)
+    let prevPoint = new THREE.Vector3(0, GROUND_Y, 0);
     points.push(prevPoint);
 
     if (routeCoordinates.length > 0) {
@@ -353,7 +366,7 @@ function updateRoute3D() {
             const dx = (cLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
             const dz = (userLat - cLat) * 111320;
 
-            const nextPoint = new THREE.Vector3(dx, -2.2, dz);
+            const nextPoint = new THREE.Vector3(dx, GROUND_Y, dz);
             const segDist = prevPoint.distanceTo(nextPoint);
             accumulatedDistance += segDist;
 
@@ -362,6 +375,7 @@ function updateRoute3D() {
                 const exactLengthNeeded = segDist - overshoot;
                 const dir = nextPoint.clone().sub(prevPoint).normalize();
                 const exactPoint = prevPoint.clone().add(dir.multiplyScalar(exactLengthNeeded));
+                exactPoint.y = GROUND_Y; // Lock Y strictly to ground
                 points.push(exactPoint);
                 break;
             } else {
@@ -372,12 +386,13 @@ function updateRoute3D() {
     } else {
         const dx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
         const dz = (userLat - targetLat) * 111320;
-        let nextPoint = new THREE.Vector3(dx, -2.2, dz);
+        let nextPoint = new THREE.Vector3(dx, GROUND_Y, dz);
 
         const dist = prevPoint.distanceTo(nextPoint);
         if (dist > VISIBLE_PATH_AHEAD) {
             const dir = nextPoint.clone().sub(prevPoint).normalize();
             nextPoint = prevPoint.clone().add(dir.multiplyScalar(VISIBLE_PATH_AHEAD));
+            nextPoint.y = GROUND_Y;
         }
         points.push(nextPoint);
     }
@@ -386,22 +401,26 @@ function updateRoute3D() {
         routeCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
         routeLength = routeCurve.getLength();
 
+        // Build Flat Ground Ribbon Path Mesh
         if (pathRibbonMesh) scene.remove(pathRibbonMesh);
-        const tubeGeom = new THREE.TubeGeometry(routeCurve, 64, 0.45, 8, false);
+        const tubeGeom = new THREE.TubeGeometry(routeCurve, 64, 0.4, 8, false);
         const tubeMat = new THREE.MeshBasicMaterial({
             color: 0x4285f4,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.85,
             wireframe: false
         });
         pathRibbonMesh = new THREE.Mesh(tubeGeom, tubeMat);
-        pathRibbonMesh.position.y = -0.15;
+        // Flatten tube vertically so it rests flat on asphalt ground surface
+        pathRibbonMesh.scale.set(1.0, 0.12, 1.0);
+        pathRibbonMesh.position.y = 0.01;
         scene.add(pathRibbonMesh);
     } else {
         routeCurve = null;
         routeLength = 0;
     }
 
+    // Google Maps Red Pin Drop Position strictly anchored on ground level
     const finalDx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
     const finalDz = (userLat - targetLat) * 111320;
 
@@ -409,7 +428,7 @@ function updateRoute3D() {
         destinationObject = createGoogleRedPinMesh();
         scene.add(destinationObject);
     }
-    destinationObject.position.set(finalDx, 0, finalDz);
+    destinationObject.position.set(finalDx, GROUND_Y, finalDz);
 }
 
 function animate() {
@@ -432,11 +451,16 @@ function animate() {
             if (distAlong > 0.5) {
                 pathArrows[i].visible = true;
                 const pt = routeCurve.getPointAt(t);
-                pathArrows[i].position.set(pt.x, -2.1, pt.z);
 
+                // Position strictly on GROUND_Y plane (-1.6m)
+                pathArrows[i].position.set(pt.x, GROUND_Y + 0.03, pt.z);
+
+                // Calculate 2D road direction tangent on horizontal ground plane
                 const tangent = routeCurve.getTangentAt(t).normalize();
-                const targetPos = pt.clone().add(tangent);
-                pathArrows[i].lookAt(targetPos);
+                const headingAngle = Math.atan2(tangent.x, -tangent.z);
+
+                // Rotate strictly around vertical Y-axis so chevron lies 100% FLAT on ground
+                pathArrows[i].rotation.set(0, headingAngle, 0);
 
                 let opacity = 0.95;
                 if (distAlong < 2) opacity = (distAlong / 2) * 0.95;
@@ -766,7 +790,7 @@ function stopCompass() {
 }
 
 // =========================================================================
-// 8. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION (WITH SCALE COVERAGE)
+// 8. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION
 // =========================================================================
 
 function initMap() {
