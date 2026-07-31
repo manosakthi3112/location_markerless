@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (2KM TILE BUFFER ENGINE)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (ULTIMATE EDITION)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -497,6 +497,14 @@ function formatClockTime(date) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
+function triggerHapticFeedback() {
+    if ("vibrate" in navigator) {
+        try {
+            navigator.vibrate([120, 60, 120]);
+        } catch (e) {}
+    }
+}
+
 function updateInstructions() {
     if (!hasStarted) return;
 
@@ -536,6 +544,7 @@ function updateInstructions() {
         if (stepDist < 15 && currentStepIndex < routeSteps.length - 1) {
             currentStepIndex++;
             const newStep = routeSteps[currentStepIndex];
+            triggerHapticFeedback();
             speakManeuver(newStep.instruction);
         }
 
@@ -545,6 +554,7 @@ function updateInstructions() {
         if (stepDist < 150 && stepDist > 140) {
             speakManeuver(`In 150 meters, ${step.instruction}`);
         } else if (stepDist < 40 && stepDist > 30) {
+            triggerHapticFeedback();
             speakManeuver(`In 40 meters, ${step.instruction}`);
         }
     } else {
@@ -624,6 +634,19 @@ function filterGPS(rawLat, rawLon, accuracy = 10) {
     return { lat: kf.lat, lon: kf.lon };
 }
 
+function updateSpeedometer(speedMps) {
+    const speedEl = document.getElementById("speed-val");
+    if (!speedEl) return;
+
+    let kmh = 0;
+    if (speedMps && speedMps > 0) {
+        kmh = (speedMps * 3.6).toFixed(0);
+    } else if (simulationActive) {
+        kmh = 4.8; // Average walking speed in demo simulation
+    }
+    speedEl.innerText = kmh;
+}
+
 function getLocation() {
     if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
@@ -633,6 +656,9 @@ function getLocation() {
                 const rawLat = position.coords.latitude;
                 const rawLon = position.coords.longitude;
                 rawGpsAccuracy = position.coords.accuracy || 10;
+
+                const speed = position.coords.speed || 0;
+                updateSpeedometer(speed);
 
                 const smoothed = filterGPS(rawLat, rawLon, rawGpsAccuracy);
                 userLat = smoothed.lat;
@@ -804,7 +830,6 @@ function setMapTileStyle(style) {
         sub = ['a', 'b', 'c', 'd'];
     }
 
-    // keepBuffer: 30 pre-loads a 30-tile grid buffer (2km+ radius) ensuring 100% full coverage when rotated!
     currentTileLayer = L.tileLayer(tileUrl, {
         maxZoom: 20,
         subdomains: sub,
@@ -937,7 +962,7 @@ function toggleMap() {
     if (isMapExpanded) {
         container.classList.add("expanded");
         if (label) label.innerText = "Collapse Map";
-        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="3" y2="21"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
     } else {
         container.classList.remove("expanded");
         if (label) label.innerText = "Expand Map";
@@ -982,6 +1007,7 @@ function toggleSimulation() {
         if (label) label.innerText = "Stop Walk";
 
         simStepIndex = 0;
+        updateSpeedometer(1.35); // 4.8 km/h walking speed
         speakManeuver("Starting Google Maps demo walk.");
 
         simulationTimer = setInterval(() => {
@@ -1008,6 +1034,7 @@ function toggleSimulation() {
         if (box) box.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
         if (label) label.innerText = "Demo Walk";
 
+        updateSpeedometer(0);
         if (simulationTimer) clearInterval(simulationTimer);
         simulationTimer = null;
     }
