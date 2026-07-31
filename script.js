@@ -12,6 +12,7 @@ let pathArrows = [];
 let maxArrows = 18;
 let arrowSpacing = 2.2; // meters
 let hasStarted = false;
+let isNightARTheme = false;
 
 // Constant Ground Plane Elevation (eye-level camera at y=0, ground at y=-1.6m)
 const GROUND_Y = -1.6;
@@ -249,7 +250,7 @@ function createGoogleRedPinMesh() {
 
     const cylinderGeom = new THREE.CylinderGeometry(0.5, 0.5, 60, 16, 1, true);
     const cylinderMat = new THREE.MeshBasicMaterial({
-        color: 0x1a73e8,
+        color: isNightARTheme ? 0x00f3ff : 0x1a73e8,
         transparent: true,
         opacity: 0.35,
         side: THREE.DoubleSide
@@ -259,7 +260,12 @@ function createGoogleRedPinMesh() {
     group.add(laser);
 
     const ringGeom = new THREE.RingGeometry(1.5, 3.2, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: isNightARTheme ? 0x00f3ff : 0x1a73e8,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85
+    });
     const ring = new THREE.Mesh(ringGeom, ringMat);
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.02;
@@ -281,7 +287,7 @@ function createRoadArrowMesh() {
     const geometry = new THREE.ShapeGeometry(shape);
     
     const material = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+        color: isNightARTheme ? 0x00f3ff : 0xffffff,
         transparent: true,
         opacity: 0.95,
         side: THREE.DoubleSide
@@ -291,9 +297,9 @@ function createRoadArrowMesh() {
     mesh.position.y = 0.04;
 
     const shadowMat = new THREE.MeshBasicMaterial({
-        color: 0x1a73e8,
+        color: isNightARTheme ? 0x9d00ff : 0x1a73e8,
         transparent: true,
-        opacity: 0.75,
+        opacity: 0.8,
         side: THREE.DoubleSide
     });
     const shadowMesh = new THREE.Mesh(geometry, shadowMat);
@@ -340,6 +346,31 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function toggleARTheme() {
+    isNightARTheme = !isNightARTheme;
+    const label = document.getElementById("ar-theme-label");
+
+    if (label) label.innerText = isNightARTheme ? "Night Theme" : "Day Theme";
+
+    if (scene) {
+        if (destinationObject) {
+            scene.remove(destinationObject);
+            destinationObject = null;
+        }
+        for (let i = 0; i < pathArrows.length; i++) {
+            scene.remove(pathArrows[i]);
+        }
+        pathArrows = [];
+        for (let i = 0; i < maxArrows; i++) {
+            const arrow = createRoadArrowMesh();
+            arrow.visible = false;
+            pathArrows.push(arrow);
+            scene.add(arrow);
+        }
+        updateRoute3D();
+    }
 }
 
 function updateRoute3D() {
@@ -396,7 +427,7 @@ function updateRoute3D() {
         if (pathLineMesh) scene.remove(pathLineMesh);
         const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
         const lineMat = new THREE.LineBasicMaterial({
-            color: 0x4285f4,
+            color: isNightARTheme ? 0x00f3ff : 0x4285f4,
             linewidth: 6,
             transparent: true,
             opacity: 0.85
@@ -465,9 +496,40 @@ function animate() {
     }
 
     updateInstructions();
+    updateARBeacon();
 
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
+    }
+}
+
+// Update Screen-Edge AR Waypoint Target Beacon
+function updateARBeacon() {
+    const beaconEl = document.getElementById("ar-target-beacon");
+    const beaconArrowEl = document.getElementById("beacon-arrow");
+    const beaconTextEl = document.getElementById("beacon-text");
+
+    if (!hasStarted || userLat === null || targetLat === null || !beaconEl) {
+        if (beaconEl) beaconEl.style.display = "none";
+        return;
+    }
+
+    let targetBearing = bearing(userLat, userLon, targetLat, targetLon);
+    let currentHeading = getEffectiveHeading();
+    let angleDiff = ((targetBearing - currentHeading) + 540) % 360 - 180;
+
+    // Display off-screen target beacon if target is more than 35 deg off-center
+    if (Math.abs(angleDiff) > 35) {
+        beaconEl.style.display = "flex";
+        if (angleDiff > 0) {
+            beaconArrowEl.innerText = "➔";
+            beaconTextEl.innerText = `Turn right (${Math.abs(angleDiff).toFixed(0)}°)`;
+        } else {
+            beaconArrowEl.innerText = "⬅";
+            beaconTextEl.innerText = `Turn left (${Math.abs(angleDiff).toFixed(0)}°)`;
+        }
+    } else {
+        beaconEl.style.display = "none";
     }
 }
 
@@ -642,7 +704,7 @@ function updateSpeedometer(speedMps) {
     if (speedMps && speedMps > 0) {
         kmh = (speedMps * 3.6).toFixed(0);
     } else if (simulationActive) {
-        kmh = 4.8; // Average walking speed in demo simulation
+        kmh = 4.8;
     }
     speedEl.innerText = kmh;
 }
@@ -1007,7 +1069,7 @@ function toggleSimulation() {
         if (label) label.innerText = "Stop Walk";
 
         simStepIndex = 0;
-        updateSpeedometer(1.35); // 4.8 km/h walking speed
+        updateSpeedometer(1.35);
         speakManeuver("Starting Google Maps demo walk.");
 
         simulationTimer = setInterval(() => {

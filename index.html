@@ -94,6 +94,12 @@
             </div>
         </div>
 
+        <!-- Floating Off-Screen AR Target Beacon (Pills on Screen Edge) -->
+        <div id="ar-target-beacon" class="gmaps-ar-beacon" style="display:none;">
+            <span id="beacon-arrow" class="beacon-icon">➔</span>
+            <span id="beacon-text">Turn towards route</span>
+        </div>
+
         <!-- Floating Speedometer Badge (Bottom Left) -->
         <div id="speedometer-badge" class="gmaps-speed-fab">
             <span id="speed-val">0</span>
@@ -107,6 +113,13 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill="currentColor"></polygon></svg>
                 </span>
                 <span class="tool-label" id="orient-label">Heading Up</span>
+            </button>
+
+            <button id="ar-theme-btn" class="gmaps-fab-btn" onclick="toggleARTheme()" title="AR Night Theme">
+                <span class="icon-svg" id="ar-theme-svg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </span>
+                <span class="tool-label" id="ar-theme-label">Day Theme</span>
             </button>
 
             <button id="voice-btn" class="gmaps-fab-btn" onclick="toggleVoice()" title="Toggle Voice Guidance">
@@ -147,6 +160,10 @@
                 </button>
             </div>
             <p class="modal-desc">Fine-tune AR heading if street path is slightly offset:</p>
+            <div class="figure8-guide">
+                <span class="fig8-anim">♾️</span>
+                <span class="fig8-text">Move phone in Figure-8 to calibrate magnetometer</span>
+            </div>
             <div class="compass-nudge-group">
                 <button class="nudge-btn" onclick="nudgeCompass(-5)">-5°</button>
                 <span id="compass-offset-label">Offset: 0°</span>
