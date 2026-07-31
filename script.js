@@ -572,9 +572,11 @@ function getLocation() {
                             iconAnchor: [10, 10]
                         });
                         userMarker = L.marker([userLat, userLon], { icon: userIcon }).addTo(leafletMap);
-                        leafletMap.setView([userLat, userLon], 18); // Zoom in on first lock
+                        leafletMap.setView([userLat, userLon], 19); // Zoom level 19 for ~100m Google Maps-like view
                     } else {
                         userMarker.setLatLng([userLat, userLon]);
+                        // Keep map centered on user with high zoom for detailed view
+                        leafletMap.setView([userLat, userLon], 19);
                     }
                 }
             },
@@ -855,7 +857,7 @@ function initMap() {
     leafletMap = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([10.641123, 77.029058], 15); // Default campus center
+    }).setView([10.641123, 77.029058], 19); // Zoom level 19 for ~100m view like Google Maps
 
     // Google Maps Tile Layer
     L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
@@ -878,7 +880,11 @@ function toggleMap() {
     }
 
     setTimeout(() => {
-        if (leafletMap) leafletMap.invalidateSize();
+        if (leafletMap) {
+            leafletMap.invalidateSize();
+            // Ensure zoom level stays at 19 for Google Maps-like detail (~100m view)
+            leafletMap.setView(leafletMap.getCenter(), 19);
+        }
     }, 350);
 }
 
