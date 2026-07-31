@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (VECTOR SVG ENGINE)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -22,7 +22,7 @@ let kf = {
 let rawGpsAccuracy = 10;
 let accuracyCircleMarker = null;
 
-// --- Leaflet Minimap Globals ---
+// --- Leaflet Minimap & Picker Globals ---
 let leafletMap = null;
 let userMarker = null;
 let userFovCone = null;
@@ -33,6 +33,11 @@ let isMapExpanded = false;
 let isHeadingUp = true; // Google Maps default: Map rotates with heading
 let currentTileLayer = null;
 let mapTileStyle = 'street'; // 'street', 'satellite', 'dark'
+
+let pickerMap = null;
+let pickerMarker = null;
+let pickerUserMarker = null;
+let _selectedLat = null, _selectedLon = null;
 
 // --- Turn-by-Turn Routing & Step Engine ---
 let routeCoordinates = []; // GeoJSON [lon, lat] points
@@ -61,35 +66,103 @@ let absoluteOrientationSensor = null;
 let deviceOrientationListener = null;
 
 // =========================================================================
-// 1. GOOGLE MAPS MANEUVER UTILITIES & ICON MAPPING
+// 1. MANEUVER VECTOR SVG DICTIONARY
 // =========================================================================
 
+const MANEUVER_SVGS = {
+    straight: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`,
+    left: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 19V11a4 4 0 0 0-4-4H5"></path><polyline points="10 2 5 7 10 12"></polyline></svg>`,
+    right: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 19V11a4 4 0 0 1 4-4h9"></path><polyline points="14 2 19 7 14 12"></polyline></svg>`,
+    slight_left: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="17" x2="7" y2="7"></line><polyline points="7 14 7 7 14 7"></polyline></svg>`,
+    slight_right: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="10 7 17 7 17 14"></polyline></svg>`,
+    uturn: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 18V10a6 6 0 0 0-12 0v8"></path><polyline points="3 14 7 18 11 14"></polyline></svg>`,
+    roundabout: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><polyline points="12 5 15 8 12 11"></polyline></svg>`,
+    arrive: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>`
+};
+
 function getManeuverIcon(type, modifier) {
-    if (type === 'arrive') return { icon: '🏁', label: 'Arrive at Destination' };
-    if (type === 'depart') return { icon: '🚀', label: 'Head towards destination' };
-    if (type === 'roundabout' || type === 'rotary') return { icon: '🔄', label: 'Take roundabout exit' };
+    if (type === 'arrive') return { icon: MANEUVER_SVGS.arrive, label: 'Arrive at Destination' };
+    if (type === 'depart') return { icon: MANEUVER_SVGS.straight, label: 'Head towards destination' };
+    if (type === 'roundabout' || type === 'rotary') return { icon: MANEUVER_SVGS.roundabout, label: 'Take roundabout exit' };
 
     switch (modifier) {
-        case 'sharp left': return { icon: '↲', label: 'Turn sharp left' };
-        case 'left': return { icon: '↰', label: 'Turn left' };
-        case 'slight left': return { icon: '↖', label: 'Slight left' };
-        case 'straight': return { icon: '⬆', label: 'Continue straight' };
-        case 'slight right': return { icon: '↗', label: 'Slight right' };
-        case 'right': return { icon: '↱', label: 'Turn right' };
-        case 'sharp right': return { icon: '↳', label: 'Turn sharp right' };
-        case 'uturn': return { icon: '↶', label: 'Make a U-Turn' };
-        default: return { icon: '⬆', label: 'Head straight' };
+        case 'sharp left': return { icon: MANEUVER_SVGS.left, label: 'Turn sharp left' };
+        case 'left': return { icon: MANEUVER_SVGS.left, label: 'Turn left' };
+        case 'slight left': return { icon: MANEUVER_SVGS.slight_left, label: 'Slight left' };
+        case 'straight': return { icon: MANEUVER_SVGS.straight, label: 'Continue straight' };
+        case 'slight right': return { icon: MANEUVER_SVGS.slight_right, label: 'Slight right' };
+        case 'right': return { icon: MANEUVER_SVGS.right, label: 'Turn right' };
+        case 'sharp right': return { icon: MANEUVER_SVGS.right, label: 'Turn sharp right' };
+        case 'uturn': return { icon: MANEUVER_SVGS.uturn, label: 'Make a U-Turn' };
+        default: return { icon: MANEUVER_SVGS.straight, label: 'Head straight' };
     }
 }
 
 // =========================================================================
-// 2. REAL-WORLD ROUTING ENGINE VIA OSRM (WITH MANEUVER STEPS)
+// 2. HOME PAGE INITIAL GPS LOCATION PERMISSION & PICKER SETUP
+// =========================================================================
+
+function requestInitialLocation() {
+    if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+            position => {
+                const rawLat = position.coords.latitude;
+                const rawLon = position.coords.longitude;
+                rawGpsAccuracy = position.coords.accuracy || 10;
+
+                const smoothed = filterGPS(rawLat, rawLon, rawGpsAccuracy);
+                userLat = smoothed.lat;
+                userLon = smoothed.lon;
+
+                if (pickerMap) {
+                    pickerMap.setView([userLat, userLon], 18);
+
+                    if (pickerUserMarker) pickerMap.removeLayer(pickerUserMarker);
+                    const bluePuckIcon = L.divIcon({
+                        className: 'custom-user-picker-marker',
+                        html: `<div style="background-color: #1a73e8; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 12px rgba(26,115,232,0.9);"></div>`,
+                        iconSize: [24, 24], iconAnchor: [12, 12]
+                    });
+                    pickerUserMarker = L.marker([userLat, userLon], { icon: bluePuckIcon })
+                        .addTo(pickerMap)
+                        .bindPopup("📍 You are here");
+                }
+
+                const instrEl = document.getElementById("picker-instruction");
+                if (instrEl && _selectedLat === null) {
+                    instrEl.innerText = "📍 Location detected! Tap map or search to set destination";
+                }
+            },
+            error => {
+                console.warn("Initial GPS request error:", error.message);
+                const instrEl = document.getElementById("picker-instruction");
+                if (instrEl) instrEl.innerText = "📍 Enable GPS location or tap map to set destination";
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+        );
+    }
+}
+
+function centerPickerOnUserLocation() {
+    if (userLat !== null && userLon !== null) {
+        if (pickerMap) {
+            pickerMap.setView([userLat, userLon], 18);
+            if (pickerUserMarker) pickerUserMarker.openPopup();
+        }
+    } else {
+        document.getElementById("picker-instruction").innerText = "📍 Requesting GPS location...";
+        requestInitialLocation();
+    }
+}
+
+// =========================================================================
+// 3. REAL-WORLD ROUTING ENGINE VIA OSRM (WITH MANEUVER STEPS)
 // =========================================================================
 
 async function calculateCustomRoute() {
     if (userLat === null || targetLat === null) return;
 
-    updateHUDInstruction("Calculating best route...", "Google Maps OSRM Engine", "⏳", "0 m");
+    updateHUDInstruction("Calculating best route...", "Google Maps OSRM Engine", MANEUVER_SVGS.straight, "0 m");
 
     try {
         const url = `https://router.project-osrm.org/route/v1/driving/${userLon},${userLat};${targetLon},${targetLat}?overview=full&geometries=geojson&steps=true`;
@@ -111,7 +184,7 @@ async function calculateCustomRoute() {
                         type: step.maneuver.type,
                         modifier: step.maneuver.modifier,
                         icon: iconInfo.icon,
-                        location: step.maneuver.location, // [lon, lat]
+                        location: step.maneuver.location,
                         distance: step.distance,
                         duration: step.duration
                     };
@@ -135,7 +208,7 @@ async function calculateCustomRoute() {
             streetName: "Direct Bearing",
             type: "straight",
             modifier: "straight",
-            icon: "⬆",
+            icon: MANEUVER_SVGS.straight,
             location: [targetLon, targetLat],
             distance: calculateDistance(userLat, userLon, targetLat, targetLon),
             duration: 0
@@ -147,34 +220,30 @@ async function calculateCustomRoute() {
 }
 
 // =========================================================================
-// 3. AUTHENTIC GOOGLE AR 3D SCENE & RED LOCATION PIN DROP
+// 4. THREE.JS 3D SCENE & GOOGLE RED PIN DROP
 // =========================================================================
 
 function createGoogleRedPinMesh() {
     const group = new THREE.Group();
 
-    // 1. Google Red Pin Head (Sphere)
     const sphereGeom = new THREE.SphereGeometry(1.6, 32, 32);
     const pinMat = new THREE.MeshBasicMaterial({ color: 0xd93025 });
     const sphere = new THREE.Mesh(sphereGeom, pinMat);
     sphere.position.y = 5.5;
     group.add(sphere);
 
-    // 2. White center dot
     const dotGeom = new THREE.SphereGeometry(0.6, 16, 16);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.set(0, 5.5, 1.2);
     group.add(dot);
 
-    // 3. Pin Cone Stem
     const coneGeom = new THREE.ConeGeometry(1.5, 3.5, 32);
     const cone = new THREE.Mesh(coneGeom, pinMat);
-    cone.rotation.x = Math.PI; // pointing down
+    cone.rotation.x = Math.PI;
     cone.position.y = 3.5;
     group.add(cone);
 
-    // 4. Sky Laser Pillar
     const cylinderGeom = new THREE.CylinderGeometry(0.6, 0.6, 50, 16, 1, true);
     const cylinderMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
@@ -186,7 +255,6 @@ function createGoogleRedPinMesh() {
     laser.position.y = 25;
     group.add(laser);
 
-    // 5. Pulsing Ground Ring
     const ringGeom = new THREE.RingGeometry(1.5, 3.0, 32);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0x1a73e8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     const ring = new THREE.Mesh(ringGeom, ringMat);
@@ -218,7 +286,6 @@ function createRoadArrowMesh() {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = 0.08;
 
-    // Google Blue Outer Drop shadow
     const shadowMat = new THREE.MeshBasicMaterial({
         color: 0x1a73e8,
         transparent: true,
@@ -252,7 +319,6 @@ function init3D() {
     containerEl.innerHTML = "";
     containerEl.appendChild(renderer.domElement);
 
-    // Create Google 3D Chevrons
     pathArrows = [];
     for (let i = 0; i < maxArrows; i++) {
         const arrow = createRoadArrowMesh();
@@ -336,7 +402,6 @@ function updateRoute3D() {
         routeLength = 0;
     }
 
-    // Google Maps Red Pin Drop Position
     const finalDx = (targetLon - userLon) * (111320 * Math.cos(toRadians(userLat)));
     const finalDz = (userLat - targetLat) * 111320;
 
@@ -398,10 +463,10 @@ function animate() {
 }
 
 // =========================================================================
-// 4. GOOGLE MAPS NAVIGATION HUD & ETA CALCULATOR
+// 5. GOOGLE MAPS NAVIGATION HUD & ETA CALCULATOR
 // =========================================================================
 
-function updateHUDInstruction(title, street, iconStr, badgeDistStr) {
+function updateHUDInstruction(title, street, iconSvgHtml, badgeDistStr) {
     const titleEl = document.getElementById("instruction");
     const streetEl = document.getElementById("street-name");
     const arrowEl = document.getElementById("nav-arrow");
@@ -409,7 +474,7 @@ function updateHUDInstruction(title, street, iconStr, badgeDistStr) {
 
     if (titleEl) titleEl.innerText = title;
     if (streetEl) streetEl.innerText = street;
-    if (arrowEl) arrowEl.innerText = iconStr;
+    if (arrowEl) arrowEl.innerHTML = iconSvgHtml;
     if (distMainEl) distMainEl.innerText = badgeDistStr;
 }
 
@@ -427,16 +492,15 @@ function updateInstructions() {
     if (!hasStarted) return;
 
     if (userLat === null || userLon === null) {
-        updateHUDInstruction("Waiting for GPS signal...", "Acquiring location", "🔄", "0 m");
+        updateHUDInstruction("Waiting for GPS signal...", "Acquiring location", MANEUVER_SVGS.straight, "0 m");
         return;
     }
 
     if (targetLat === null || targetLon === null) {
-        updateHUDInstruction("Select a destination", "Tap Google Maps or search", "📍", "0 m");
+        updateHUDInstruction("Select a destination", "Tap Google Maps or search", MANEUVER_SVGS.straight, "0 m");
         return;
     }
 
-    // Total distance, ETA duration, and Arrival Clock
     const totalDist = calculateDistance(userLat, userLon, targetLat, targetLon);
     const distEl = document.getElementById("distance");
     const etaMinEl = document.getElementById("eta-min");
@@ -448,7 +512,7 @@ function updateInstructions() {
             `${totalDist.toFixed(0)} m`;
     }
 
-    const walkingMin = Math.max(1, Math.ceil((totalDist / 1.35) / 60)); // 1.35 m/s avg walking speed
+    const walkingMin = Math.max(1, Math.ceil((totalDist / 1.35) / 60));
     if (etaMinEl) etaMinEl.innerText = `${walkingMin} min`;
 
     if (etaClockEl) {
@@ -456,7 +520,6 @@ function updateInstructions() {
         etaClockEl.innerText = formatClockTime(arrivalDate);
     }
 
-    // Maneuver step calculations
     if (routeSteps.length > 0 && currentStepIndex < routeSteps.length) {
         const step = routeSteps[currentStepIndex];
         const stepDist = calculateDistance(userLat, userLon, step.location[1], step.location[0]);
@@ -480,21 +543,21 @@ function updateInstructions() {
         let currentHeading = getEffectiveHeading();
 
         let diff = ((targetBearing - currentHeading) + 540) % 360 - 180;
-        let icon = "⬆";
+        let iconSvg = MANEUVER_SVGS.straight;
         let title = "Head straight";
 
         if (Math.abs(diff) < 20) {
-            title = "Head straight"; icon = "⬆";
+            title = "Head straight"; iconSvg = MANEUVER_SVGS.straight;
         } else if (diff >= 20 && diff < 160) {
-            title = "Turn right"; icon = "↱";
+            title = "Turn right"; iconSvg = MANEUVER_SVGS.right;
         } else if (diff <= -20 && diff > -160) {
-            title = "Turn left"; icon = "↰";
+            title = "Turn left"; iconSvg = MANEUVER_SVGS.left;
         } else {
-            title = "Make U-Turn"; icon = "↶";
+            title = "Make U-Turn"; iconSvg = MANEUVER_SVGS.uturn;
         }
 
         const distStr = totalDist > 1000 ? `${(totalDist / 1000).toFixed(1)} km` : `${totalDist.toFixed(0)} m`;
-        updateHUDInstruction(title, "Towards destination", icon, distStr);
+        updateHUDInstruction(title, "Towards destination", iconSvg, distStr);
     }
 }
 
@@ -515,16 +578,20 @@ function speakManeuver(text) {
 
 function toggleVoice() {
     voiceEnabled = !voiceEnabled;
-    const btn = document.getElementById("voice-btn");
-    if (btn) {
-        btn.innerHTML = voiceEnabled ?
-            `🔊 <span class="tool-label">Voice ON</span>` :
-            `🔇 <span class="tool-label">Muted</span>`;
+    const box = document.getElementById("voice-svg-box");
+    const label = document.getElementById("voice-label");
+
+    if (voiceEnabled) {
+        if (box) box.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+        if (label) label.innerText = "Voice ON";
+    } else {
+        if (box) box.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M23 9l-6 6m0-6l6 6"></path></svg>`;
+        if (label) label.innerText = "Muted";
     }
 }
 
 // =========================================================================
-// 5. GPS SMOOTHING & ACCURACY RING
+// 6. GPS SMOOTHING & ACCURACY RING
 // =========================================================================
 
 function filterGPS(rawLat, rawLon, accuracy = 10) {
@@ -576,7 +643,7 @@ function getLocation() {
             },
             error => {
                 console.warn("GPS Location error:", error.message);
-                updateHUDInstruction("GPS Signal Weak", "Ensure location permissions", "⚠️", "0 m");
+                updateHUDInstruction("GPS Signal Weak", "Ensure location permissions", MANEUVER_SVGS.straight, "0 m");
             },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
         );
@@ -590,7 +657,7 @@ function updateGPSBadge(acc) {
 }
 
 // =========================================================================
-// 6. COMPASS & MAP ORIENTATION (HEADING-UP vs NORTH-UP)
+// 7. COMPASS & MAP ORIENTATION (HEADING-UP vs NORTH-UP)
 // =========================================================================
 
 function getEffectiveHeading() {
@@ -699,7 +766,7 @@ function stopCompass() {
 }
 
 // =========================================================================
-// 7. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION
+// 8. GOOGLE MAPS LEAFLET INTEGRATION & ROTATION (WITH SCALE COVERAGE)
 // =========================================================================
 
 function initMap() {
@@ -708,7 +775,7 @@ function initMap() {
     leafletMap = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([10.641123, 77.029058], 19);
+    }).setView([userLat || 10.641123, userLon || 77.029058], 19);
 
     setMapTileStyle('street');
 }
@@ -732,15 +799,16 @@ function setMapTileStyle(style) {
 }
 
 function toggleMapStyle() {
+    const label = document.getElementById("map-style-label");
     if (mapTileStyle === 'street') {
         setMapTileStyle('satellite');
-        document.getElementById("map-style-btn").innerHTML = `🗺️ <span class="tool-label">Satellite</span>`;
+        if (label) label.innerText = "Satellite";
     } else if (mapTileStyle === 'satellite') {
         setMapTileStyle('dark');
-        document.getElementById("map-style-btn").innerHTML = `🗺️ <span class="tool-label">Dark</span>`;
+        if (label) label.innerText = "Dark";
     } else {
         setMapTileStyle('street');
-        document.getElementById("map-style-btn").innerHTML = `🗺️ <span class="tool-label">Street</span>`;
+        if (label) label.innerText = "Street";
     }
 }
 
@@ -749,18 +817,18 @@ function updateLeafletUserMarker() {
 
     const heading = getEffectiveHeading();
 
-    // Rotate Leaflet map for Heading-Up navigation mode
     const mapEl = document.getElementById("map");
     if (mapEl) {
         if (isHeadingUp) {
-            mapEl.style.transform = `rotate(${-heading}deg)`;
+            mapEl.style.transform = `rotate(${-heading}deg) scale(1.85)`;
+            mapEl.style.transformOrigin = `center center`;
         } else {
-            mapEl.style.transform = `rotate(0deg)`;
+            mapEl.style.transform = `rotate(0deg) scale(1.0)`;
+            mapEl.style.transformOrigin = `center center`;
         }
     }
 
     if (!userMarker) {
-        // Google Maps Blue User Puck
         const userIcon = L.divIcon({
             className: 'custom-user-marker',
             html: `<div style="background-color: #1a73e8; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 10px rgba(26,115,232,0.9);"></div>`,
@@ -768,7 +836,6 @@ function updateLeafletUserMarker() {
         });
         userMarker = L.marker([userLat, userLon], { icon: userIcon }).addTo(leafletMap);
 
-        // Google Navigation Beam (Field of View Cone)
         const fovIcon = L.divIcon({
             className: 'leaflet-user-fov-cone',
             html: `<div style="width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-bottom: 50px solid rgba(26,115,232,0.4); transform: rotate(${isHeadingUp ? 0 : heading}deg); transform-origin: 50% 100%;"></div>`,
@@ -776,7 +843,6 @@ function updateLeafletUserMarker() {
         });
         userFovCone = L.marker([userLat, userLon], { icon: fovIcon, zIndexOffset: -100 }).addTo(leafletMap);
 
-        // GPS Accuracy circle
         accuracyCircleMarker = L.circle([userLat, userLon], {
             radius: rawGpsAccuracy,
             color: '#1a73e8',
@@ -833,13 +899,12 @@ function updateLeafletRoute() {
         const innerLine = L.polyline(latlngs, { color: '#4285f4', weight: 5, opacity: 1.0 });
         mapRouteLine = L.layerGroup([outerLine, innerLine]).addTo(leafletMap);
 
-        // Add maneuver icons on Leaflet map polyline
         if (routeSteps.length > 0) {
             routeSteps.forEach(step => {
                 const stepIcon = L.divIcon({
                     className: 'map-step-node',
-                    html: `<div style="background: #ffffff; color: #1a73e8; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #1a73e8; font-size: 10px; font-weight: 800; text-align: center; line-height: 14px;">${step.icon}</div>`,
-                    iconSize: [18, 18], iconAnchor: [9, 9]
+                    html: `<div style="background: #ffffff; color: #1a73e8; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #1a73e8; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">${step.icon}</div>`,
+                    iconSize: [20, 20], iconAnchor: [10, 10]
                 });
                 const mMarker = L.marker([step.location[1], step.location[0]], { icon: stepIcon }).addTo(leafletMap);
                 maneuverMapMarkers.push(mMarker);
@@ -856,14 +921,17 @@ function updateLeafletRoute() {
 function toggleMap() {
     isMapExpanded = !isMapExpanded;
     const container = document.getElementById("minimap-container");
-    const btn = document.getElementById("toggle-map-btn");
+    const iconBox = document.getElementById("toggle-map-icon");
+    const label = document.getElementById("toggle-map-label");
 
     if (isMapExpanded) {
         container.classList.add("expanded");
-        btn.innerText = "⛕ Collapse Map";
+        if (label) label.innerText = "Collapse Map";
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
     } else {
         container.classList.remove("expanded");
-        btn.innerText = "⛶ Expand Map";
+        if (label) label.innerText = "Expand Map";
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
     }
 
     setTimeout(() => {
@@ -881,12 +949,13 @@ function recenterMap() {
 }
 
 // =========================================================================
-// 8. TEST DEMO WALK SIMULATION ENGINE
+// 9. TEST DEMO WALK SIMULATION ENGINE
 // =========================================================================
 
 function toggleSimulation() {
     simulationActive = !simulationActive;
-    const btn = document.getElementById("sim-btn");
+    const box = document.getElementById("sim-svg-box");
+    const label = document.getElementById("sim-label");
 
     if (simulationActive) {
         if (routeCoordinates.length < 2) {
@@ -894,8 +963,9 @@ function toggleSimulation() {
             simulationActive = false;
             return;
         }
-        btn.className = "gmaps-fab-btn demo-btn";
-        btn.innerHTML = `⏸ <span class="tool-label">Stop Walk</span>`;
+        if (box) box.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+        if (label) label.innerText = "Stop Walk";
+
         simStepIndex = 0;
         speakManeuver("Starting Google Maps demo walk.");
 
@@ -920,20 +990,17 @@ function toggleSimulation() {
             }
         }, 1100);
     } else {
-        btn.className = "gmaps-fab-btn demo-btn";
-        btn.innerHTML = `▶ <span class="tool-label">Demo Walk</span>`;
+        if (box) box.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+        if (label) label.innerText = "Demo Walk";
+
         if (simulationTimer) clearInterval(simulationTimer);
         simulationTimer = null;
     }
 }
 
 // =========================================================================
-// 9. GOOGLE MAPS DESTINATION PICKER & NOMINATIM SEARCH
+// 10. GOOGLE MAPS DESTINATION PICKER & NOMINATIM SEARCH
 // =========================================================================
-
-let pickerMap = null;
-let pickerMarker = null;
-let _selectedLat = null, _selectedLon = null;
 
 function initDestinationPicker() {
     if (pickerMap) return;
@@ -951,6 +1018,8 @@ function initDestinationPicker() {
     pickerMap.on('click', function (e) {
         setPickedDestination(e.latlng.lat, e.latlng.lng, null);
     });
+
+    requestInitialLocation();
 }
 
 function setPickedDestination(lat, lng, label) {
@@ -1019,7 +1088,7 @@ function quickSearch(placeName) {
 }
 
 // =========================================================================
-// 10. SYSTEM ENTRY & EXIT WORKFLOWS
+// 11. SYSTEM ENTRY & EXIT WORKFLOWS
 // =========================================================================
 
 function startAR() {
@@ -1092,14 +1161,14 @@ function stopAR() {
 function startCamera() {
     const video = document.getElementById('camera-feed');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        updateHUDInstruction("Camera Not Supported", "Navigation running without AR video", "📷", "0 m");
+        updateHUDInstruction("Camera Not Supported", "Navigation running without AR video", MANEUVER_SVGS.straight, "0 m");
         return;
     }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; })
         .catch(err => {
             console.warn("Camera access denied:", err);
-            updateHUDInstruction("Camera Permission Denied", "Navigation running on fallback", "📷", "0 m");
+            updateHUDInstruction("Camera Permission Denied", "Navigation running on fallback", MANEUVER_SVGS.straight, "0 m");
         });
 }
 
@@ -1126,7 +1195,7 @@ function bearing(lat1, lon1, lat2, lon2) {
     return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
 
-// Initialize destination picker on load
+// Initialize destination picker and request GPS location on load
 document.addEventListener('DOMContentLoaded', function () {
     initDestinationPicker();
 

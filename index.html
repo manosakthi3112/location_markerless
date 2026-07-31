@@ -33,13 +33,17 @@
     <!-- Live AR Camera Feed -->
     <video id="camera-feed" autoplay playsinline></video>
 
-    <!-- Destination Picker (Full-screen map view before navigation starts) -->
+    <!-- Destination Picker (Full-screen map view on Home Page) -->
     <div id="destination-picker" class="picker-container">
         <div id="search-container">
             <div class="search-bar-wrapper">
-                <span class="search-icon">🔍</span>
+                <span class="search-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
                 <input type="text" id="search-input" placeholder="Search Google Maps or tap map..." oninput="handleSearch()" autocomplete="off">
-                <button class="search-clear-btn" id="search-clear" onclick="clearSearch()">&times;</button>
+                <button class="search-clear-btn" id="search-clear" onclick="clearSearch()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
             <div id="search-results"></div>
             
@@ -53,13 +57,20 @@
 
         <div id="picker-map"></div>
 
+        <!-- Floating My Location Button on Home Page Picker -->
+        <button id="picker-location-btn" class="picker-location-fab" onclick="centerPickerOnUserLocation()" title="Locate Me">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3m0 14v3M2 12h3m14 0h3"></path><circle cx="12" cy="12" r="7"></circle></svg>
+            <span class="fab-text">My Location</span>
+        </button>
+
         <div id="picker-bottom" class="gmaps-picker-bottom">
             <div class="sheet-handle"></div>
-            <p id="picker-instruction">📍 Tap anywhere on Google Maps to select destination</p>
+            <p id="picker-instruction">📍 Requesting GPS location... Tap map to pick destination</p>
             <p id="selected-coords">Coordinates: --</p>
             <div class="picker-action-group">
                 <button id="start-nav-btn" class="gmaps-start-btn" style="display:none;" onclick="startAR()">
-                    <span class="btn-icon">▲</span> Start Navigation
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+                    <span>Start Navigation</span>
                 </button>
             </div>
         </div>
@@ -70,7 +81,9 @@
         <!-- Top Google Maps Signature Green Header -->
         <div id="top-nav-panel" class="gmaps-top-header">
             <div class="gmaps-nav-icon-box" id="nav-icon-box">
-                <span id="nav-arrow" class="gmaps-maneuver-arrow">↑</span>
+                <span id="nav-arrow" class="gmaps-maneuver-arrow">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                </span>
             </div>
             <div class="gmaps-nav-text-box">
                 <div class="gmaps-step-main">
@@ -78,40 +91,54 @@
                     <h3 id="instruction" class="gmaps-instruction-title">Calculating route...</h3>
                 </div>
                 <p id="street-name" class="gmaps-street-subtext">Calculating route...</p>
-                <div id="next-step-preview" class="gmaps-next-preview">
-                    <span>Next: Continue along path</span>
-                </div>
             </div>
         </div>
 
         <!-- Floating Action Tools (Right Column) -->
         <div id="middle-tools">
             <button id="orient-mode-btn" class="gmaps-fab-btn" onclick="toggleMapOrientation()" title="Toggle Heading Up Map">
-                🧭 <span class="tool-label" id="orient-label">Heading Up</span>
+                <span class="icon-svg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill="currentColor"></polygon></svg>
+                </span>
+                <span class="tool-label" id="orient-label">Heading Up</span>
             </button>
 
             <button id="voice-btn" class="gmaps-fab-btn" onclick="toggleVoice()" title="Toggle Voice Guidance">
-                🔊 <span class="tool-label">Voice ON</span>
+                <span class="icon-svg" id="voice-svg-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                </span>
+                <span class="tool-label" id="voice-label">Voice ON</span>
             </button>
 
             <button id="map-style-btn" class="gmaps-fab-btn" onclick="toggleMapStyle()" title="Map Style">
-                🗺️ <span class="tool-label">Street</span>
+                <span class="icon-svg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                </span>
+                <span class="tool-label" id="map-style-label">Street</span>
             </button>
 
             <button id="sim-btn" class="gmaps-fab-btn demo-btn" onclick="toggleSimulation()" title="Test Walk Simulation">
-                ▶ <span class="tool-label">Demo Walk</span>
+                <span class="icon-svg" id="sim-svg-box">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </span>
+                <span class="tool-label" id="sim-label">Demo Walk</span>
             </button>
 
             <button id="compass-btn" class="gmaps-fab-btn" onclick="toggleCompassModal()" title="Compass Alignment">
-                ⚙️ <span class="tool-label" id="compass-info">0°</span>
+                <span class="icon-svg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </span>
+                <span class="tool-label" id="compass-info">0°</span>
             </button>
         </div>
 
         <!-- Compass Manual Calibration Modal -->
         <div id="compass-modal" class="glass-modal" style="display: none;">
             <div class="modal-header">
-                <h4>⚙️ Compass Alignment</h4>
-                <button class="close-modal-btn" onclick="toggleCompassModal()">&times;</button>
+                <h4>Compass Alignment</h4>
+                <button class="close-modal-btn" onclick="toggleCompassModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
             <p class="modal-desc">Fine-tune AR heading if street path is slightly offset:</p>
             <div class="compass-nudge-group">
@@ -137,18 +164,27 @@
                 </div>
                 <div class="gmaps-eta-right">
                     <button class="gmaps-exit-btn" onclick="stopAR()" title="Exit Navigation">
-                        ✖ Exit
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <span>Exit</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Collapsible Interactive Google Minimap Container -->
+        <!-- Side Interactive Google Minimap Container -->
         <div id="minimap-container" class="gmaps-map-container">
             <div id="map"></div>
             <div class="map-controls-bar">
-                <button id="toggle-map-btn" class="map-btn" onclick="toggleMap()">⛕ Expand Map</button>
-                <button id="recenter-map-btn" class="map-btn" onclick="recenterMap()">🎯 Center</button>
+                <button id="toggle-map-btn" class="map-btn" onclick="toggleMap()">
+                    <span id="toggle-map-icon">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                    </span>
+                    <span id="toggle-map-label">Expand Map</span>
+                </button>
+                <button id="recenter-map-btn" class="map-btn" onclick="recenterMap()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg>
+                    <span>Center</span>
+                </button>
             </div>
         </div>
     </div>

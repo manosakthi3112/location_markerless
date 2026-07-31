@@ -91,6 +91,17 @@ body {
     justify-content: space-between;
 }
 
+/* Helper for SVG icon centering */
+.icon-svg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-svg svg {
+    display: block;
+}
+
 /* =========================================================================
    AUTHENTIC GOOGLE MAPS TOP NAVIGATION HEADER
    ========================================================================= */
@@ -123,10 +134,14 @@ body {
 }
 
 .gmaps-maneuver-arrow {
-    font-size: 30px;
-    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: white;
-    line-height: 1;
+}
+
+.gmaps-maneuver-arrow svg {
+    stroke: white;
 }
 
 .gmaps-nav-text-box {
@@ -172,14 +187,6 @@ body {
     text-overflow: ellipsis;
 }
 
-.gmaps-next-preview {
-    margin-top: 6px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.75);
-    font-weight: 500;
-    display: none; /* Enabled dynamically if multi-step */
-}
-
 /* =========================================================================
    FLOATING FAB BUTTONS (GOOGLE MAPS STYLE)
    ========================================================================= */
@@ -206,9 +213,13 @@ body {
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     box-shadow: 0 2px 10px rgba(60, 64, 67, 0.3);
     transition: all 0.2s ease;
+}
+
+.gmaps-fab-btn svg {
+    flex-shrink: 0;
 }
 
 .gmaps-fab-btn:active {
@@ -220,6 +231,10 @@ body {
     background: linear-gradient(135deg, #1a73e8, #0d47a1);
     color: white;
     box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
+}
+
+.gmaps-fab-btn.demo-btn svg {
+    fill: white;
 }
 
 .tool-label {
@@ -261,8 +276,11 @@ body {
     background: none;
     border: none;
     color: white;
-    font-size: 20px;
+    padding: 4px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-desc {
@@ -363,14 +381,21 @@ body {
     background: var(--gmaps-red);
     color: white;
     border: none;
-    padding: 12px 20px;
+    padding: 10px 18px;
     border-radius: 24px;
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 3px 10px rgba(217, 48, 37, 0.35);
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     transition: all 0.2s ease;
+}
+
+.gmaps-exit-btn svg {
+    stroke: white;
 }
 
 .gmaps-exit-btn:active {
@@ -379,34 +404,35 @@ body {
 }
 
 /* =========================================================================
-   INTERACTIVE GOOGLE MINIMAP
+   INTERACTIVE SIDE GOOGLE MINIMAP
    ========================================================================= */
 .gmaps-map-container {
     pointer-events: auto;
     position: absolute;
     bottom: calc(85px + env(safe-area-inset-bottom, 0px));
     right: 14px;
-    width: 140px;
-    height: 140px;
-    border-radius: 16px;
+    width: 145px;
+    height: 145px;
+    border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     z-index: 20;
     transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     border: 3px solid #ffffff;
-    background: #eee;
+    background: #e5e5e5;
 }
 
 .gmaps-map-container.expanded {
     width: calc(100% - 28px);
-    height: 42vh;
+    height: 44vh;
     bottom: calc(95px + env(safe-area-inset-bottom, 0px));
 }
 
 #map {
     width: 100%;
     height: 100%;
-    transition: transform 0.2s ease-out; /* Smooth map rotation for heading-up mode */
+    transform-origin: center center;
+    transition: transform 0.2s ease-out;
 }
 
 .map-controls-bar {
@@ -416,26 +442,34 @@ body {
     right: 8px;
     display: flex;
     justify-content: space-between;
+    gap: 6px;
     z-index: 400;
     pointer-events: none;
 }
 
 .map-btn {
     pointer-events: auto;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
     color: var(--gmaps-text-dark);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    padding: 6px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 6px 10px;
     border-radius: 14px;
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.map-btn svg {
+    flex-shrink: 0;
 }
 
 /* =========================================================================
-   DESTINATION PICKER SCREEN
+   DESTINATION PICKER SCREEN ON HOME PAGE
    ========================================================================= */
 .picker-container {
     position: fixed;
@@ -468,7 +502,8 @@ body {
 }
 
 .search-icon {
-    font-size: 16px;
+    display: flex;
+    align-items: center;
     margin-right: 10px;
     color: #5f6368;
 }
@@ -488,9 +523,12 @@ body {
 .search-clear-btn {
     background: none;
     border: none;
-    font-size: 20px;
     color: #70757a;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
 }
 
 #search-results {
@@ -499,7 +537,7 @@ body {
     border-radius: 14px;
     margin-top: 8px;
     max-height: 220px;
-    overflow-y: auto;
+    overflow-y_ auto;
     box-shadow: 0 6px 18px rgba(0,0,0,0.2);
     color: #202124;
 }
@@ -542,6 +580,30 @@ body {
     flex: 1;
     width: 100%;
     height: 100%;
+}
+
+.picker-location-fab {
+    position: absolute;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    right: 14px;
+    z-index: 500;
+    background: #ffffff;
+    color: var(--gmaps-blue);
+    border: 1px solid #dadce0;
+    padding: 10px 16px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 3px 12px rgba(60, 64, 67, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.picker-location-fab:active {
+    transform: scale(0.95);
+    background: #e8f0fe;
 }
 
 .gmaps-picker-bottom {
