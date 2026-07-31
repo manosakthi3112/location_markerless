@@ -6,6 +6,7 @@
     --gmaps-blue-dark: #1557b0;
     --gmaps-red: #d93025;
     --gmaps-yellow: #f9ab00;
+    --gmaps-purple: #9c27b0;
     --gmaps-bg-card: #ffffff;
     --gmaps-text-dark: #202124;
     --gmaps-text-sub: #5f6368;
@@ -292,6 +293,12 @@ body {
     transition: all 0.2s ease;
 }
 
+.gmaps-fab-btn.flyover-fab {
+    background: linear-gradient(135deg, #8e24aa, #4a148c);
+    color: white;
+    box-shadow: 0 4px 12px rgba(142, 36, 170, 0.4);
+}
+
 .gmaps-fab-btn svg {
     flex-shrink: 0;
 }
@@ -467,12 +474,29 @@ body {
     margin-top: 2px;
 }
 
+.gmaps-eta-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
 .gmaps-gps-pill {
     background: #e6f4ea;
     color: var(--gmaps-green-text);
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 12px;
     font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.gmaps-elev-pill {
+    background: #fce8e6;
+    color: #c5221f;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10px;
     font-weight: 700;
     white-space: nowrap;
 }

@@ -1,5 +1,5 @@
 // =========================================================================
-// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (ULTIMATE EDITION)
+// AUTHENTIC GOOGLE MAPS 3D AR LIVE VIEW NAVIGATION SYSTEM (FLYOVER EDITION)
 // =========================================================================
 
 // --- 3D Scene Globals ---
@@ -13,6 +13,7 @@ let maxArrows = 18;
 let arrowSpacing = 2.2; // meters
 let hasStarted = false;
 let isNightARTheme = false;
+let isFlyoverMode = false;
 
 // Constant Ground Plane Elevation (eye-level camera at y=0, ground at y=-1.6m)
 const GROUND_Y = -1.6;
@@ -224,7 +225,7 @@ async function calculateCustomRoute() {
 }
 
 // =========================================================================
-// 4. THREE.JS 3D AR SCENE & GROUND PLANE OBJECTS
+// 4. THREE.JS 3D AR SCENE & FLYOVER OVERHEAD CAMERA
 // =========================================================================
 
 function createGoogleRedPinMesh() {
@@ -348,6 +349,26 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+function toggleFlyoverMode() {
+    if (routeCoordinates.length < 2) {
+        alert("Please select a destination first to preview 3D Flyover!");
+        return;
+    }
+
+    isFlyoverMode = !isFlyoverMode;
+    const label = document.getElementById("flyover-label");
+
+    if (isFlyoverMode) {
+        if (label) label.innerText = "Exit Flyover";
+        speakManeuver("Starting 3D aerial flyover preview.");
+        updateHUDInstruction("3D Aerial Flyover Preview", "Overhead route view", MANEUVER_SVGS.straight, "Flyover");
+    } else {
+        if (label) label.innerText = "3D Flyover";
+        camera.position.set(0, 0, 0);
+        speakManeuver("Returned to AR Live View.");
+    }
+}
+
 function toggleARTheme() {
     isNightARTheme = !isNightARTheme;
     const label = document.getElementById("ar-theme-label");
@@ -453,8 +474,19 @@ function updateRoute3D() {
 function animate() {
     requestAnimationFrame(animate);
 
-    if (hasStarted && controls) {
+    if (hasStarted && controls && !isFlyoverMode) {
         controls.update();
+    }
+
+    // 3D Flyover Overhead Camera Animation Mode
+    if (isFlyoverMode && routeCurve && routeLength > 0.1) {
+        const time = Date.now() * 0.0004;
+        const t = (time % 1.0);
+        const flyPt = routeCurve.getPointAt(t);
+
+        // Position camera 32 meters above and slightly behind current route point
+        camera.position.set(flyPt.x, 32, flyPt.z + 20);
+        camera.lookAt(flyPt.x, GROUND_Y, flyPt.z);
     }
 
     if (routeCurve && routeLength > 0.1) {
@@ -495,8 +527,10 @@ function animate() {
         }
     }
 
-    updateInstructions();
-    updateARBeacon();
+    if (!isFlyoverMode) {
+        updateInstructions();
+        updateARBeacon();
+    }
 
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
@@ -518,7 +552,6 @@ function updateARBeacon() {
     let currentHeading = getEffectiveHeading();
     let angleDiff = ((targetBearing - currentHeading) + 540) % 360 - 180;
 
-    // Display off-screen target beacon if target is more than 35 deg off-center
     if (Math.abs(angleDiff) > 35) {
         beaconEl.style.display = "flex";
         if (angleDiff > 0) {
@@ -1024,11 +1057,11 @@ function toggleMap() {
     if (isMapExpanded) {
         container.classList.add("expanded");
         if (label) label.innerText = "Collapse Map";
-        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="3" y2="21"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>`;
     } else {
         container.classList.remove("expanded");
         if (label) label.innerText = "Expand Map";
-        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
+        if (iconBox) iconBox.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="10" y2="14"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
     }
 
     setTimeout(() => {
@@ -1233,6 +1266,7 @@ function proceedWithAR(orientationGranted) {
 
 function stopAR() {
     hasStarted = false;
+    isFlyoverMode = false;
     if (simulationActive) toggleSimulation();
 
     document.getElementById("destination-picker").style.display = "flex";
